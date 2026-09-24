@@ -518,6 +518,20 @@
         socket.on('message_deleted', (id) => { for(let k in conversations) conversations[k] = conversations[k].filter(m => m.id !== id); renderMessages(); });
         socket.on('user_banned_notice', (t) => { if(myPseudo === t) { alert("Banni !"); location.reload(); } });
         socket.on('session_replaced', (msg) => { alert(msg || "Vous vous êtes connecté ailleurs."); location.reload(); });
+
+        // Debug Firebase visible uniquement en console (F12), et uniquement pour l'admin :
+        // permet de voir la vraie cause si la liste "hors ligne" reste vide (erreur Firebase,
+        // comptes sans displayName, etc.) sans avoir besoin des logs serveur.
+        socket.on('firebase_debug', (d) => {
+            if (!isAdmin) return;
+            if (d.lastError) {
+                console.warn('[Firebase debug] Dernière erreur Firebase :', d.lastError.code, d.lastError.message, '(cache actuel :', d.cacheSize, 'pseudo(s))');
+            } else if (d.cacheSize === 0) {
+                console.warn('[Firebase debug] Aucune erreur, mais 0 pseudo en cache. Vérifie que les comptes Firebase ont bien un "displayName" défini.');
+            } else {
+                console.log('[Firebase debug] OK —', d.cacheSize, 'pseudo(s) en cache, dernier rafraîchissement :', new Date(d.lastRefreshAt).toLocaleTimeString());
+            }
+        });
         socket.on('load_history', (h) => { conversations["Général"] = h; renderMessages(); });
         socket.on('load_private_history', (d) => { conversations[d.target] = d.history; if(currentTab === d.target) renderMessages(); });
         
