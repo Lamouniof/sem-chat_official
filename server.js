@@ -206,18 +206,6 @@ io.on("connection", (socket) => {
 
     // 3. Action définitive sur Firebase Authentication
     try {
-      // Option A (Recommandée) : Désactiver le compte dans Firebase
-      // L'utilisateur ne pourra plus jamais se connecter ni se réinscrire avec ce pseudo.
-      await admin.auth().updateUser(targetUid, { disabled: true });
-      
-      // Révoquer immédiatement sa session courante
-      await admin.auth().revokeRefreshTokens(targetUid);
-
-      /* 
-      // Option B : Supprimer totalement le compte Firebase
-      // (Décommente la ligne ci-dessous si tu préfères la suppression pure et simple)
-      // await admin.auth().deleteUser(targetUid);
-      */
 
       console.log(`[BAN] L'utilisateur ${target} (UID: ${targetUid}) a été banni définitivement.`);
     } catch (err) {
