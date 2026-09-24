@@ -66,13 +66,41 @@ const leaderboard = new Map();    // pseudo -> meilleur score
 let nextMsgId = 1;
 
 const INACTIVITY_MS = 5 * 60 * 1000; // 5 minutes sans activité réelle => affiché "hors ligne"
+const FIREBASE_CACHE_TTL_MS = 2 * 60 * 1000; // on ne re-interroge Firebase Auth qu'au max toutes les 2 min
+
+// Cache des pseudos Firebase (évite de spammer admin.auth().listUsers() à chaque
+// rafraîchissement toutes les 30s, ce qui pouvait déclencher des erreurs/quota et
+// vider la liste "hors ligne" en silence).
+let firebaseUsersCache = [];
+let firebaseCacheAt = 0;
 
 function privateKey(a, b) {
   return [a, b].sort().join("|");
 }
 
-// Fonction pour récupérer les membres en ligne et hors ligne depuis Firebase Auth
-async function sendUserLists() {
+// Va chercher tous les pseudos (displayName) de tous les comptes Firebase Auth et
+// met à jour le cache. En cas d'erreur, on GARDE l'ancien cache plutôt que de le vider,
+// pour ne pas faire disparaître la liste "hors ligne" à cause d'une erreur passagère.
+async function refreshFirebaseUsersCache() {
+  try {
+    // Récupérer TOUS les comptes Firebase Auth (limite à 1000 utilisateurs) : c'est cette
+    // liste complète qui permet d'afficher tous les pseudos existants comme "hors ligne"
+    // dès le démarrage du serveur, avant même qu'aucun d'eux ne se connecte.
+    const listUsersResult = await admin.auth().listUsers(1000);
+    firebaseUsersCache = listUsersResult.users
+      .map(userRecord => userRecord.displayName)
+      .filter(Boolean); // Filtre les pseudos non nuls
+    firebaseCacheAt = Date.now();
+  } catch (error) {
+    console.error(
+      "Erreur lors de la récupération des utilisateurs Firebase (on garde le dernier cache connu) :",
+      error.code || "", error.message || error
+    );
+  }
+}
+
+// Diffuse à tout le monde l'état en ligne / hors ligne, à partir du cache Firebase.
+function broadcastUserLists() {
   const now = Date.now();
 
   // "En ligne" = socket connecté ET activité réelle (souris/clavier/message) il y a moins
@@ -83,33 +111,24 @@ async function sendUserLists() {
     return now - last < INACTIVITY_MS;
   });
 
-  let offlineList = [];
+  // Hors ligne = tout compte Firebase connu qui n'est pas actuellement dans la liste "en ligne"
+  const offlineList = firebaseUsersCache.filter(pseudo => !onlineList.includes(pseudo));
 
-  try {
-    // Récupérer TOUS les comptes Firebase Auth (limite à 1000 utilisateurs) : c'est cette
-    // liste complète qui permet d'afficher tous les pseudos existants comme "hors ligne"
-    // dès le démarrage du serveur, avant même qu'aucun d'eux ne se connecte.
-    const listUsersResult = await admin.auth().listUsers(1000);
-
-    // Extraire les pseudos (displayName) de tous les comptes Firebase
-    const allFirebaseUsers = listUsersResult.users
-      .map(userRecord => userRecord.displayName)
-      .filter(Boolean); // Filtre les pseudos non nuls
-
-    // Hors ligne = tout compte Firebase qui n'est pas actuellement dans la liste "en ligne"
-    offlineList = allFirebaseUsers.filter(pseudo => !onlineList.includes(pseudo));
-  } catch (error) {
-    // On log l'erreur mais on continue : au moins la liste "en ligne" doit s'afficher
-    console.error("Erreur lors de la récupération des utilisateurs Firebase (liste hors-ligne indisponible) :", error);
-  }
-
-  console.log(`[update_users] ${onlineList.length} en ligne, ${offlineList.length} hors ligne`);
+  console.log(`[update_users] ${onlineList.length} en ligne, ${offlineList.length} hors ligne (cache Firebase: ${firebaseUsersCache.length} comptes)`);
 
   io.emit("update_users", {
     onlineCount: onlineList.length,
     onlineUsers: onlineList,
     offlineUsers: offlineList
   });
+}
+
+// Rafraîchit le cache Firebase si besoin (TTL) puis diffuse les listes.
+async function sendUserLists() {
+  if (Date.now() - firebaseCacheAt > FIREBASE_CACHE_TTL_MS) {
+    await refreshFirebaseUsersCache();
+  }
+  broadcastUserLists();
 }
 
 function getTopScores() {
@@ -139,12 +158,17 @@ io.on("connection", (socket) => {
   const knownPseudo = users.get(uid);
   const finalPseudo = String(pseudo || knownPseudo || decoded.name || "Utilisateur_" + uid.substring(0, 5)).trim();
 
-  // Vérification de double connexion
-  if (onlineSockets.has(finalPseudo) && onlineSockets.get(finalPseudo) !== socket.id) {
-    return socket.emit("auth_response", {
-      success: false,
-      message: "Ce compte est déjà connecté sur un autre appareil."
-    });
+  // Si ce pseudo est déjà marqué "en ligne" sur un AUTRE socket, on prend le relais au lieu
+  // de bloquer la nouvelle connexion : ça évite de rester bloqué "connecté ailleurs" après
+  // une coupure réseau, une mise en veille du téléphone, un onglet qui a planté, etc.
+  const existingSocketId = onlineSockets.get(finalPseudo);
+  if (existingSocketId && existingSocketId !== socket.id) {
+    const existingSocket = io.sockets.sockets.get(existingSocketId);
+    if (existingSocket) {
+      existingSocket.emit("session_replaced", "Vous vous êtes connecté depuis un autre appareil/onglet.");
+      existingSocket.disconnect(true);
+    }
+    onlineSockets.delete(finalPseudo);
   }
 
   const isAdmin = ADMIN_UIDS.includes(uid);
