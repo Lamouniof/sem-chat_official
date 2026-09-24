@@ -161,11 +161,16 @@ io.on("connection", (socket) => {
   });
 
   // --- Mode espion admin : consulter la conversation privée de deux autres utilisateurs ---
+  // --- Mode espion admin : consulter la conversation privée de deux autres utilisateurs ---
   socket.on("admin_get_private_history", ({ user1, user2 }) => {
     if (!myIsAdmin) return;
     if (!user1 || !user2 || user1 === user2) return;
+    
+    // La fonction privateKey trie automatiquement les pseudos pour trouver la bonne clé
     const key = privateKey(user1, user2);
     const history = privateHistory.get(key) || [];
+    
+    // Renvoie l'historique au socket de l'admin
     socket.emit("load_admin_private_history", { user1, user2, history });
   });
 
