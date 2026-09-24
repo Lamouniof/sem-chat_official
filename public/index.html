@@ -5,6 +5,7 @@
     <title>ProChat | Cloud File Edition</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+
     <style>
         body { background: #0f0c29; height: 100vh; display: flex; align-items: center; justify-content: center; font-family: 'Segoe UI', sans-serif; margin: 0; color: white; overflow: hidden; }
         #auth-box { background: white; padding: 2.5rem; border-radius: 20px; width: 380px; color: #333; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
@@ -13,7 +14,7 @@
         .sidebar { width: 300px; background: #1a1a2e; color: white; display: flex; flex-direction: column; border-right: 1px solid #2d2d44; }
         .chat-main { flex-grow: 1; display: flex; flex-direction: column; background: #f8f9fa; color: #333; position: relative; }
         .sidebar-header { padding: 20px; background: #16213e; font-weight: bold; text-align: center; }
-        #user-list { padding: 15px; list-style: none; overflow-y: auto; flex-grow: 1; }
+        #user-list { padding: 15px; list-style: none; overflow-y: auto; flex-grow: 1; margin: 0; }
         .user-item { padding: 10px; margin-bottom: 8px; border-radius: 12px; background: rgba(255,255,255,0.05); cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
         .user-item:hover { background: rgba(255,255,255,0.15); }
         .chat-nav { background: #e9ecef; display: flex; padding: 10px 20px; gap: 10px; border-bottom: 1px solid #ddd; overflow-x: auto; }
@@ -29,60 +30,29 @@
         .btn-delete { color: #ff4d4d; cursor: pointer; font-size: 0.7rem; margin-left: 10px; visibility: hidden; }
         .message-wrapper:hover .btn-delete { visibility: visible; }
 
-        /* --- STYLE ARCADE SNAKE REDUIT --- */
+        /* Auth box */
+        .auth-tabs { display: flex; margin-bottom: 1.5rem; border-radius: 12px; overflow: hidden; border: 1px solid #ddd; }
+        .auth-tab-btn { flex: 1; padding: 10px; text-align: center; cursor: pointer; background: #f1f1f1; font-weight: bold; font-size: 0.9rem; }
+        .auth-tab-btn.active { background: #4361ee; color: white; }
+        #auth-error { color: #ff4d4d; font-size: 0.85rem; margin-top: -0.5rem; margin-bottom: 1rem; display: none; }
+
+        /* Panneau Admin Espionnage */
+        #admin-panel { background: #16213e; border-top: 2px solid #ff4d4d; }
+        #admin-panel .admin-panel-title { color: #ff4d4d; font-weight: bold; margin-bottom: 8px; font-size: 0.85rem; }
+
+        /* Snake game */
         #snake-overlay {
-            display: none;
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(10, 10, 25, 0.95);
-            z-index: 1000;
-            flex-direction: row; /* Pour mettre le leaderboard à côté */
-            align-items: center;
-            justify-content: center;
-            backdrop-filter: blur(8px);
-            gap: 20px;
-            padding: 20px;
+            display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(10, 10, 25, 0.95); z-index: 1000; flex-direction: row;
+            align-items: center; justify-content: center; backdrop-filter: blur(8px); gap: 20px; padding: 20px;
         }
-        .game-wrapper {
-            display: flex;
-            align-items: flex-start;
-            gap: 20px;
-            max-height: 90%;
-        }
-        .game-container {
-            background: #1a1a2e;
-            padding: 15px;
-            border-radius: 20px;
-            border: 3px solid #4361ee;
-            box-shadow: 0 0 50px rgba(67, 97, 238, 0.3);
-            text-align: center;
-        }
-        #snake-canvas {
-            background: #050510;
-            border: 2px solid #2d2d44;
-            border-radius: 10px;
-            display: block;
-            /* Taille réduite du canvas */
-            width: 320px;
-            height: 320px;
-        }
+        .game-wrapper { display: flex; align-items: flex-start; gap: 20px; max-height: 90%; }
+        .game-container { background: #1a1a2e; padding: 15px; border-radius: 20px; border: 3px solid #4361ee; box-shadow: 0 0 50px rgba(67, 97, 238, 0.3); text-align: center; }
+        #snake-canvas { background: #050510; border: 2px solid #2d2d44; border-radius: 10px; display: block; width: 320px; height: 320px; }
         .game-ui { color: white; margin-bottom: 10px; }
         .game-header { font-size: 1.2rem; font-weight: bold; color: #4361ee; text-shadow: 0 0 10px rgba(67, 97, 238, 0.5); margin-bottom: 2px; }
         .score-box { font-family: 'Courier New', monospace; font-size: 1rem; background: #0f0c29; padding: 3px 12px; border-radius: 8px; display: inline-block; border: 1px solid #4361ee; }
-
-        /* LEADERBOARD */
-        .leaderboard-container {
-            background: #1a1a2e;
-            padding: 15px;
-            border-radius: 20px;
-            border: 2px solid #ffac33;
-            width: 220px;
-            color: white;
-            box-shadow: 0 0 30px rgba(255, 172, 51, 0.2);
-            align-self: stretch;
-            display: flex;
-            flex-direction: column;
-        }
+        .leaderboard-container { background: #1a1a2e; padding: 15px; border-radius: 20px; border: 2px solid #ffac33; width: 220px; color: white; box-shadow: 0 0 30px rgba(255, 172, 51, 0.2); align-self: stretch; display: flex; flex-direction: column; }
         .leaderboard-title { color: #ffac33; font-weight: bold; text-align: center; margin-bottom: 10px; border-bottom: 1px solid #ffac33; padding-bottom: 5px; font-size: 0.9rem;}
         #leaderboard-list { list-style: none; padding: 0; margin: 0; font-size: 0.8rem; overflow-y: auto; }
         .leader-item { display: flex; justify-content: space-between; padding: 4px 8px; margin-bottom: 4px; border-radius: 5px; background: rgba(255,255,255,0.05); }
@@ -93,9 +63,19 @@
 
     <div id="auth-box">
         <h2 class="text-center mb-4" style="color: #4361ee; font-weight: bold;">Sem-chat</h2>
-        <input type="text" id="pseudo" class="form-control mb-3" placeholder="Pseudo">
+
+        <div class="auth-tabs">
+            <div class="auth-tab-btn active" id="tab-login" onclick="switchAuthTab('login')">Connexion</div>
+            <div class="auth-tab-btn" id="tab-register" onclick="switchAuthTab('register')">Inscription</div>
+        </div>
+
+        <div id="auth-error"></div>
+
+        <input type="text" id="pseudo" class="form-control mb-3" placeholder="Pseudo" style="display:none">
+        <input type="email" id="email" class="form-control mb-3" placeholder="Email">
         <input type="password" id="mdp" class="form-control mb-4" placeholder="Mot de passe">
-        <button class="btn btn-primary w-100" onclick="sendAuth()">Entrer</button>
+
+        <button class="btn btn-primary w-100" id="auth-submit-btn" onclick="handleAuthSubmit()">Entrer</button>
     </div>
 
     <div id="chat-area">
@@ -115,9 +95,7 @@
 
                 <div class="leaderboard-container">
                     <div class="leaderboard-title">🏆 TOP 10</div>
-                    <ul id="leaderboard-list">
-                        <!-- Rempli par socket -->
-                    </ul>
+                    <ul id="leaderboard-list"></ul>
                 </div>
             </div>
         </div>
@@ -126,10 +104,28 @@
             <div class="sidebar">
                 <div class="sidebar-header">👥 UTILISATEURS</div>
                 <ul id="user-list"></ul>
+
+                <!-- BARRE D'ESPIONNAGE ADMIN -->
+                <div id="admin-panel" class="p-3" style="display: none;">
+                    <div class="admin-panel-title">🕵️ ESPIONNER DES MP</div>
+                    <div class="mb-2">
+                        <select id="admin-user1" class="form-select form-select-sm bg-dark text-white border-secondary mb-2">
+                            <option value="">-- Utilisateur A --</option>
+                        </select>
+                        <select id="admin-user2" class="form-select form-select-sm bg-dark text-white border-secondary">
+                            <option value="">-- Utilisateur B --</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-danger btn-sm w-100 fw-bold" onclick="adminInspectConversation()">Inspecter Chat</button>
+                </div>
+
                 <div class="p-2">
                     <button class="btn btn-warning w-100 fw-bold shadow-sm" onclick="toggleSnake()">🎮 ARCADE JEUX</button>
                 </div>
                 <div class="p-3 bg-dark" id="my-name">Connecté : <b></b></div>
+                <div class="p-2">
+                    <button class="btn btn-outline-light btn-sm w-100" onclick="logout()">Déconnexion</button>
+                </div>
             </div>
             <div class="chat-main">
                 <div class="chat-nav" id="chat-tabs"></div>
@@ -146,16 +142,116 @@
         </div>
     </div>
 
+    <!-- ============================================================
+         FIREBASE — nouveau SDK modulaire (v9+), chargé via ESM depuis
+         le CDN gstatic. On expose sur window les quelques fonctions
+         dont le reste du code (non-module, classique) a besoin, car
+         un script type="module" a son propre scope isolé.
+         ============================================================ -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-analytics.js";
+        import {
+            getAuth,
+            onAuthStateChanged,
+            signInWithEmailAndPassword,
+            createUserWithEmailAndPassword,
+            updateProfile,
+            signOut
+        } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBQxtrpW96MQ7rWr52ErH3G6aq_06pfO-I",
+            authDomain: "sem-chat-40c32.firebaseapp.com",
+            projectId: "sem-chat-40c32",
+            storageBucket: "sem-chat-40c32.firebasestorage.app",
+            messagingSenderId: "324099007763",
+            appId: "1:324099007763:web:88278df1985b7e8bab66e6",
+            measurementId: "G-L2QVZXJGSF"
+        };
+
+        const fbApp = initializeApp(firebaseConfig);
+        try { getAnalytics(fbApp); } catch (e) { /* analytics bloqué (ex: adblock) : pas grave, on continue */ }
+
+        const auth = getAuth(fbApp);
+
+        // Pont vers le script classique plus bas (non-module) qui gère
+        // le chat, le pseudo, etc.
+        window.fbSignIn = (email, mdp) => signInWithEmailAndPassword(auth, email, mdp);
+        window.fbSignUp = (email, mdp) => createUserWithEmailAndPassword(auth, email, mdp);
+        window.fbUpdateProfile = (user, profile) => updateProfile(user, profile);
+        window.fbSignOut = () => signOut(auth);
+        window.fbOnAuthStateChanged = (callback) => onAuthStateChanged(auth, callback);
+    </script>
+
     <script>
+        let authMode = "login";
+
+        function switchAuthTab(mode) {
+            authMode = mode;
+            document.getElementById('tab-login').classList.toggle('active', mode === 'login');
+            document.getElementById('tab-register').classList.toggle('active', mode === 'register');
+            document.getElementById('pseudo').style.display = mode === 'register' ? 'block' : 'none';
+            document.getElementById('auth-submit-btn').innerText = mode === 'register' ? "Créer mon compte" : "Entrer";
+            document.getElementById('auth-error').style.display = 'none';
+        }
+
+        function showAuthError(msg) {
+            const el = document.getElementById('auth-error');
+            el.innerText = msg;
+            el.style.display = 'block';
+        }
+
+        function handleAuthSubmit() {
+            const email = document.getElementById('email').value.trim();
+            const mdp = document.getElementById('mdp').value;
+            const pseudo = document.getElementById('pseudo').value.trim();
+
+            if (!email || !mdp) { showAuthError("Email et mot de passe requis."); return; }
+
+            if (authMode === 'register') {
+                if (!pseudo) { showAuthError("Choisis un pseudo."); return; }
+                window.fbSignUp(email, mdp)
+                    .then((cred) => window.fbUpdateProfile(cred.user, { displayName: pseudo }))
+                    .catch((err) => showAuthError(traduireErreur(err)));
+            } else {
+                window.fbSignIn(email, mdp)
+                    .catch((err) => showAuthError(traduireErreur(err)));
+            }
+        }
+
+        function traduireErreur(err) {
+            switch (err.code) {
+                case 'auth/email-already-in-use': return "Cet email est déjà utilisé.";
+                case 'auth/invalid-email': return "Email invalide.";
+                case 'auth/weak-password': return "Mot de passe trop court (6 caractères min).";
+                case 'auth/unauthorized-domain': return "Ce domaine n'est pas autorisé dans Firebase (Authentication > Settings > Authorized domains).";
+                case 'auth/user-not-found':
+                case 'auth/wrong-password':
+                case 'auth/invalid-credential': return "Email ou mot de passe incorrect.";
+                default: return err.message;
+            }
+        }
+
+        function logout() {
+            window.fbSignOut().then(() => location.reload());
+        }
+
         const socket = io();
         let myPseudo = "", isAdmin = false, currentTab = "Général";
         let conversations = { "Général": [] };
         let unreadCounts = {};
 
-        function sendAuth() {
-            const p = document.getElementById('pseudo').value, m = document.getElementById('mdp').value;
-            if(p && m) socket.emit('login_register', {pseudo: p, mdp: m});
-        }
+        window.fbOnAuthStateChanged((user) => {
+            if (user) {
+                user.getIdToken().then((idToken) => {
+                    socket.emit('login_register', {
+                        pseudo: user.displayName || user.email,
+                        token: idToken
+                    });
+                });
+            }
+        });
 
         socket.on('auth_response', (data) => {
             if (data.success) {
@@ -163,9 +259,17 @@
                 document.getElementById('auth-box').style.display = 'none';
                 document.getElementById('chat-area').style.display = 'flex';
                 document.getElementById('my-name').innerHTML = `Connecté : <b>${myPseudo} ${isAdmin ? '<span class="badge bg-danger">ADMIN</span>' : ''}</b>`;
+
+                if (isAdmin) {
+                    document.getElementById('admin-panel').style.display = 'block';
+                }
+
                 renderTabs();
                 setInterval(() => socket.emit('heartbeat', myPseudo), 15000);
-            } else { alert(data.message); }
+            } else {
+                showAuthError(data.message || "Connexion refusée par le serveur.");
+                window.fbSignOut();
+            }
         });
 
         function renderMessages() {
@@ -199,8 +303,14 @@
         function renderTabs() {
             const container = document.getElementById('chat-tabs');
             container.innerHTML = `<div class="tab ${currentTab === 'Général' ? 'active' : ''}" onclick="switchTab('Général')">🌍 Général ${unreadCounts['Général'] ? `<span class="notif-badge">${unreadCounts['Général']}</span>` : ''}</div>`;
-            Object.keys(conversations).forEach(name => { if(name !== 'Général') container.innerHTML += `<div class="tab ${currentTab === name ? 'active' : ''}" onclick="switchTab('${name}')">👤 ${name} ${unreadCounts[name] ? `<span class="notif-badge">${unreadCounts[name]}</span>` : ''} <span class="ms-2" onclick="event.stopPropagation(); delete conversations['${name}']; switchTab('Général')">×</span></div>`; });
+            Object.keys(conversations).forEach(name => {
+                if(name !== 'Général') {
+                    const icon = name.startsWith('🕵️') ? '' : '👤 ';
+                    container.innerHTML += `<div class="tab ${currentTab === name ? 'active' : ''}" onclick="switchTab('${name}')">${icon}${name} ${unreadCounts[name] ? `<span class="notif-badge">${unreadCounts[name]}</span>` : ''} <span class="ms-2" onclick="event.stopPropagation(); delete conversations['${name}']; switchTab('Général')">×</span></div>`;
+                }
+            });
         }
+
         function switchTab(t) { currentTab = t; unreadCounts[t] = 0; renderTabs(); renderMessages(); }
 
         socket.on('message', (d) => {
@@ -219,13 +329,46 @@
 
         socket.on('update_users', (list) => {
             const el = document.getElementById('user-list'); el.innerHTML = '';
+
+            const sel1 = document.getElementById('admin-user1');
+            const sel2 = document.getElementById('admin-user2');
+            const val1 = sel1.value; const val2 = sel2.value;
+
+            sel1.innerHTML = '<option value="">-- Utilisateur A --</option>';
+            sel2.innerHTML = '<option value="">-- Utilisateur B --</option>';
+
             list.forEach(u => {
                 const li = document.createElement('li'); li.className = 'user-item';
-                let banBtn = (isAdmin && u !== "william") ? `<button class="btn btn-sm btn-danger" onclick="banUser('${u}')">Ban</button>` : '';
+                let banBtn = (isAdmin && u !== myPseudo) ? `<button class="btn btn-sm btn-danger" onclick="banUser('${u}')">Ban</button>` : '';
                 li.innerHTML = `<span>${u} ${u === myPseudo ? '(Moi)' : ''}</span> ${banBtn}`;
                 if(u !== myPseudo) li.onclick = (e) => { if(e.target.tagName !== 'BUTTON') { if(!conversations[u]) { conversations[u] = []; socket.emit('get_private_history', {user: myPseudo, target: u}); } switchTab(u); } };
                 el.appendChild(li);
+
+                sel1.innerHTML += `<option value="${u}">${u}</option>`;
+                sel2.innerHTML += `<option value="${u}">${u}</option>`;
             });
+
+            sel1.value = val1; sel2.value = val2;
+        });
+
+        function adminInspectConversation() {
+            const u1 = document.getElementById('admin-user1').value;
+            const u2 = document.getElementById('admin-user2').value;
+
+            if (!u1 || !u2) { alert("Sélectionne deux utilisateurs !"); return; }
+            if (u1 === u2) { alert("Choisis deux utilisateurs différents !"); return; }
+
+            const tabName = `🕵️ ${u1} ↔ ${u2}`;
+            if (!conversations[tabName]) conversations[tabName] = [];
+
+            socket.emit('admin_get_private_history', { admin: myPseudo, user1: u1, user2: u2 });
+            switchTab(tabName);
+        }
+
+        socket.on('load_admin_private_history', (d) => {
+            const tabName = `🕵️ ${d.user1} ↔ ${d.user2}`;
+            conversations[tabName] = d.history;
+            if (currentTab === tabName) renderMessages();
         });
 
         function deleteMsg(id) { if(confirm("Supprimer ?")) socket.emit('delete_message', id, myPseudo); }
@@ -278,7 +421,7 @@
         function startSnake() {
             const canvas = document.getElementById("snake-canvas");
             const ctx = canvas.getContext("2d");
-            const box = 16; // Taille réduite (20 -> 16)
+            const box = 16;
             let score = 0;
             let snake = [{x: 10 * box, y: 10 * box}, {x: 9 * box, y: 10 * box}];
             let food = {x: Math.floor(Math.random() * (canvas.width/box)) * box, y: Math.floor(Math.random() * (canvas.height/box)) * box};
