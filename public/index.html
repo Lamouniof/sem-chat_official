@@ -71,8 +71,7 @@
 
         <div id="auth-error"></div>
 
-        <input type="text" id="pseudo" class="form-control mb-3" placeholder="Pseudo" style="display:none">
-        <input type="email" id="email" class="form-control mb-3" placeholder="Email">
+        <input type="text" id="pseudo" class="form-control mb-3" placeholder="Pseudo">
         <input type="password" id="mdp" class="form-control mb-4" placeholder="Mot de passe">
 
         <button class="btn btn-primary w-100" id="auth-submit-btn" onclick="handleAuthSubmit()">Entrer</button>
@@ -143,10 +142,11 @@
     </div>
 
     <!-- ============================================================
-         FIREBASE — nouveau SDK modulaire (v9+), chargé via ESM depuis
-         le CDN gstatic. On expose sur window les quelques fonctions
-         dont le reste du code (non-module, classique) a besoin, car
-         un script type="module" a son propre scope isolé.
+         FIREBASE — SDK modulaire (v9+) via ESM. L'utilisateur ne voit
+         jamais d'email : on en fabrique un "fantôme" à partir du
+         pseudo pour que Firebase Authentication puisse gérer le
+         compte en coulisses. On expose sur window ce dont le script
+         classique plus bas a besoin.
          ============================================================ -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -171,14 +171,27 @@
         };
 
         const fbApp = initializeApp(firebaseConfig);
-        try { getAnalytics(fbApp); } catch (e) { /* analytics bloqué (ex: adblock) : pas grave, on continue */ }
+        try { getAnalytics(fbApp); } catch (e) { /* analytics bloqué (adblock) : pas grave */ }
 
         const auth = getAuth(fbApp);
 
-        // Pont vers le script classique plus bas (non-module) qui gère
-        // le chat, le pseudo, etc.
-        window.fbSignIn = (email, mdp) => signInWithEmailAndPassword(auth, email, mdp);
-        window.fbSignUp = (email, mdp) => createUserWithEmailAndPassword(auth, email, mdp);
+        // Transforme un pseudo en "email fantôme" déterministe, jamais
+        // montré à l'utilisateur, uniquement utilisé pour parler à
+        // Firebase (qui exige un identifiant au format email).
+        function pseudoToFakeEmail(pseudo) {
+            const clean = pseudo.trim().toLowerCase();
+            const base = clean.replace(/[^a-z0-9]/g, '') || 'u';
+            let hash = 0;
+            for (let i = 0; i < clean.length; i++) {
+                hash = ((hash << 5) - hash + clean.charCodeAt(i)) | 0;
+            }
+            const suffix = Math.abs(hash).toString(36);
+            return `${base}-${suffix}@sem-chat.local`;
+        }
+
+        window.fbPseudoToFakeEmail = pseudoToFakeEmail;
+        window.fbSignIn = (pseudo, mdp) => signInWithEmailAndPassword(auth, pseudoToFakeEmail(pseudo), mdp);
+        window.fbSignUp = (pseudo, mdp) => createUserWithEmailAndPassword(auth, pseudoToFakeEmail(pseudo), mdp);
         window.fbUpdateProfile = (user, profile) => updateProfile(user, profile);
         window.fbSignOut = () => signOut(auth);
         window.fbOnAuthStateChanged = (callback) => onAuthStateChanged(auth, callback);
@@ -186,12 +199,12 @@
 
     <script>
         let authMode = "login";
+        let pendingPseudo = ""; // pseudo tapé, conservé le temps que Firebase confirme la connexion
 
         function switchAuthTab(mode) {
             authMode = mode;
             document.getElementById('tab-login').classList.toggle('active', mode === 'login');
             document.getElementById('tab-register').classList.toggle('active', mode === 'register');
-            document.getElementById('pseudo').style.display = mode === 'register' ? 'block' : 'none';
             document.getElementById('auth-submit-btn').innerText = mode === 'register' ? "Créer mon compte" : "Entrer";
             document.getElementById('auth-error').style.display = 'none';
         }
@@ -203,32 +216,32 @@
         }
 
         function handleAuthSubmit() {
-            const email = document.getElementById('email').value.trim();
-            const mdp = document.getElementById('mdp').value;
             const pseudo = document.getElementById('pseudo').value.trim();
+            const mdp = document.getElementById('mdp').value;
 
-            if (!email || !mdp) { showAuthError("Email et mot de passe requis."); return; }
+            if (!pseudo || !mdp) { showAuthError("Pseudo et mot de passe requis."); return; }
+            if (mdp.length < 6) { showAuthError("Le mot de passe doit faire au moins 6 caractères."); return; }
+
+            pendingPseudo = pseudo;
 
             if (authMode === 'register') {
-                if (!pseudo) { showAuthError("Choisis un pseudo."); return; }
-                window.fbSignUp(email, mdp)
+                window.fbSignUp(pseudo, mdp)
                     .then((cred) => window.fbUpdateProfile(cred.user, { displayName: pseudo }))
                     .catch((err) => showAuthError(traduireErreur(err)));
             } else {
-                window.fbSignIn(email, mdp)
+                window.fbSignIn(pseudo, mdp)
                     .catch((err) => showAuthError(traduireErreur(err)));
             }
         }
 
         function traduireErreur(err) {
             switch (err.code) {
-                case 'auth/email-already-in-use': return "Cet email est déjà utilisé.";
-                case 'auth/invalid-email': return "Email invalide.";
+                case 'auth/email-already-in-use': return "Ce pseudo est déjà pris.";
                 case 'auth/weak-password': return "Mot de passe trop court (6 caractères min).";
                 case 'auth/unauthorized-domain': return "Ce domaine n'est pas autorisé dans Firebase (Authentication > Settings > Authorized domains).";
                 case 'auth/user-not-found':
                 case 'auth/wrong-password':
-                case 'auth/invalid-credential': return "Email ou mot de passe incorrect.";
+                case 'auth/invalid-credential': return "Pseudo ou mot de passe incorrect.";
                 default: return err.message;
             }
         }
@@ -246,7 +259,7 @@
             if (user) {
                 user.getIdToken().then((idToken) => {
                     socket.emit('login_register', {
-                        pseudo: user.displayName || user.email,
+                        pseudo: user.displayName || pendingPseudo,
                         token: idToken
                     });
                 });
