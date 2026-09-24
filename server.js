@@ -79,8 +79,9 @@ async function sendUserLists() {
       .map(userRecord => userRecord.displayName)
       .filter(Boolean); // Filtre les pseudos non nuls
 
-    // 2. Récupérer les membres actuellement en ligne
-    const onlineList = Array.from(users.values());
+    // 2. Récupérer les membres actuellement en ligne (sockets réellement connectés,
+    // pas juste "vus une fois" — `users` n'est jamais nettoyé, `onlineSockets` si)
+    const onlineList = Array.from(onlineSockets.keys());
 
     // 3. Calculer les membres hors ligne
     const offlineList = allFirebaseUsers.filter(pseudo => !onlineList.includes(pseudo));
@@ -95,9 +96,6 @@ async function sendUserLists() {
     console.error("Erreur lors de la récupération des utilisateurs Firebase:", error);
   }
 }
-
-// Remplace les anciens io.emit("update_users", getOnlineList()) par :
-// sendUserLists();
 
 function getTopScores() {
   return Array.from(leaderboard.entries())
@@ -145,7 +143,7 @@ io.on("connection", (socket) => {
 
   socket.emit("auth_response", { success: true, pseudo: finalPseudo, is_admin: isAdmin });
   socket.emit("load_history", generalHistory);
-  io.emit("update_users", getOnlineList());
+  sendUserLists();
 });
 
   socket.on("heartbeat", (pseudo) => {
@@ -187,7 +185,6 @@ io.on("connection", (socket) => {
     socket.emit("load_private_history", { target, history });
   });
 
-  // --- Mode espion admin : consulter la conversation privée de deux autres utilisateurs ---
   // --- Mode espion admin : consulter la conversation privée de deux autres utilisateurs ---
   socket.on("admin_get_private_history", ({ user1, user2 }) => {
     if (!myIsAdmin) return;
@@ -242,7 +239,7 @@ io.on("connection", (socket) => {
       console.error(`[BAN ERROR] Impossible de supprimer le compte Firebase :`, err.message);
     }
 
-    io.emit("update_users", getOnlineList());
+    sendUserLists();
   });
 
   socket.on("get_leaderboard", () => {
@@ -260,7 +257,7 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     if (myPseudo && onlineSockets.get(myPseudo) === socket.id) {
       onlineSockets.delete(myPseudo);
-      io.emit("update_users", getOnlineList());
+      sendUserLists();
     }
   });
 });
