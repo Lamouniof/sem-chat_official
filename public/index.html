@@ -225,10 +225,18 @@
             pendingPseudo = pseudo;
 
             if (authMode === 'register') {
-                window.fbSignUp(pseudo, mdp)
-                    .then((cred) => window.fbUpdateProfile(cred.user, { displayName: pseudo }))
-                    .catch((err) => showAuthError(traduireErreur(err)));
-            } else {
+    window.fbSignUp(pseudo, mdp)
+        .then((cred) => {
+            return window.fbUpdateProfile(cred.user, { displayName: pseudo });
+        })
+        .then(() => {
+            // Force la réémission après la mise à jour du profil si nécessaire
+            auth.currentUser.getIdToken(true).then((idToken) => {
+                socket.emit('login_register', { pseudo: pseudo, token: idToken });
+            });
+        })
+        .catch((err) => showAuthError(traduireErreur(err)));
+} else {
                 window.fbSignIn(pseudo, mdp)
                     .catch((err) => showAuthError(traduireErreur(err)));
             }
@@ -256,15 +264,20 @@
         let unreadCounts = {};
 
         window.fbOnAuthStateChanged((user) => {
-            if (user) {
-                user.getIdToken().then((idToken) => {
-                    socket.emit('login_register', {
-                        pseudo: user.displayName || pendingPseudo,
-                        token: idToken
-                    });
+    if (user) {
+        user.getIdToken().then((idToken) => {
+            // Utilise user.displayName s'il existe, sinon bascule sur pendingPseudo
+            const pseudoToSend = user.displayName || pendingPseudo;
+            
+            if (pseudoToSend) {
+                socket.emit('login_register', {
+                    pseudo: pseudoToSend,
+                    token: idToken
                 });
             }
         });
+    }
+});
 
         socket.on('auth_response', (data) => {
             if (data.success) {
