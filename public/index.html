@@ -137,8 +137,25 @@
 
         <div class="main-container">
             <div class="sidebar">
-                <div class="sidebar-header">👥 UTILISATEURS</div>
-                <ul id="user-list"></ul>
+    <!-- En-tête avec le compteur de membres en ligne -->
+    <div class="sidebar-header d-flex justify-content-between align-items-center">
+        <span>👥 MEMBRES</span>
+        <span class="badge bg-success" id="online-counter">0 en ligne</span>
+    </div>
+
+    <!-- Conteneur défilant de la liste des utilisateurs -->
+    <div style="overflow-y: auto; flex-grow: 1; padding: 15px;">
+        <small class="text-success fw-bold d-block mb-2">🟢 EN LIGNE</small>
+        <ul id="user-list-online" class="list-unstyled mb-4"></ul>
+
+        <small class="text-secondary fw-bold d-block mb-2">⚪ HORS LIGNE</small>
+        <ul id="user-list-offline" class="list-unstyled mb-0" style="opacity: 0.6;"></ul>
+    </div>
+
+    <!-- Reste de la sidebar (Espion, Arcade, Déconnexion...) -->
+    <div id="admin-panel" class="p-3" style="display: none;">...</div>
+    ...
+</div>
 
                 <!-- BARRE D'ESPIONNAGE ADMIN -->
                 <div id="admin-panel" class="p-3" style="display: none;">
