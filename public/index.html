@@ -410,6 +410,7 @@
         });
 
         socket.on('update_users', (data) => {
+            console.log('[update_users] reçu :', data);
             // Compat : si jamais le serveur renvoie encore un simple tableau (ancien format)
             const onlineUsers = Array.isArray(data) ? data : (data.onlineUsers || []);
             const offlineUsers = Array.isArray(data) ? [] : (data.offlineUsers || []);
