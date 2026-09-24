@@ -302,6 +302,23 @@
         let conversations = { "Général": [] };
         let unreadCounts = {};
 
+        // --- Détection d'activité réelle (souris, clavier, clic...) ---
+        // Throttlée : on n'envoie au serveur qu'une fois toutes les 20s max,
+        // pour ne pas spammer, mais assez souvent pour rester bien en dessous
+        // du seuil d'inactivité de 5 min côté serveur.
+        let lastActivitySentAt = 0;
+        function pingActivity() {
+            if (!myPseudo) return;
+            const now = Date.now();
+            if (now - lastActivitySentAt > 20000) {
+                lastActivitySentAt = now;
+                socket.emit('activity');
+            }
+        }
+        ['mousemove', 'mousedown', 'keydown', 'click', 'touchstart', 'scroll'].forEach(evt => {
+            document.addEventListener(evt, pingActivity, { passive: true });
+        });
+
         onAuthStateChanged(auth, (user) => {
             if (user) {
                 user.getIdToken().then((idToken) => {
@@ -326,6 +343,7 @@
 
                 renderTabs();
                 setInterval(() => socket.emit('heartbeat', myPseudo), 15000);
+                socket.emit('activity'); // active dès la connexion
             } else {
                 showAuthError(data.message || "Connexion refusée par le serveur.");
                 signOut(auth);
