@@ -2,6 +2,7 @@ const express = require("express");
 const http = require("http");
 const path = require("path");
 const { Server } = require("socket.io");
+const admin = require("firebase-admin");
 
 const app = express();
 const server = http.createServer(app);
@@ -11,18 +12,41 @@ const io = new Server(server, {
 
 const PORT = process.env.PORT || 3000;
 
-// Le·s pseudo·s listés ici sont admin ET impossibles à bannir (comme "william" dans le client)
-const SUPER_ADMINS = ["william"];
+// ============================================================
+// FIREBASE ADMIN — vérifie les tokens envoyés par le client au lieu
+// de comparer un mot de passe stocké en clair.
+//
+// Sur Render : variable d'environnement FIREBASE_SERVICE_ACCOUNT
+// contenant le JSON COMPLET de la clé de service (jamais commité
+// sur GitHub — voir l'incident de sécurité qu'on vient de corriger).
+// En local : FIREBASE_CREDENTIALS_PATH pointant vers le fichier JSON
+// téléchargé (lui aussi à garder hors du repo, dans .gitignore).
+// ============================================================
+let credential;
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  credential = admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT));
+} else {
+  const credPath = process.env.FIREBASE_CREDENTIALS_PATH || "./firebase-service-account.json";
+  credential = admin.credential.cert(require(credPath));
+}
+admin.initializeApp({ credential });
+
+// UID Firebase du compte admin (Firebase Console > Authentication > Users
+// > colonne "User UID"). Pas d'email, pas de pseudo : c'est le seul
+// identifiant fiable et non falsifiable depuis qu'on est passé en
+// connexion pseudo-only avec email fantôme.
+const ADMIN_UID = process.env.ADMIN_UID || "COLLE_ICI_L_UID_FIREBASE";
 
 app.use(express.static(path.join(__dirname, "public")));
 
 // ---------- "Base de données" en mémoire (remise à zéro à chaque redémarrage) ----------
-const users = new Map();        // pseudo -> { mdp, isAdmin }
-const bannedUsers = new Set();  // pseudos bannis
-const onlineSockets = new Map();// pseudo -> socket.id
-const generalHistory = [];      // messages du chat général
+const users = new Map();          // uid -> pseudo
+const onlineSockets = new Map();  // pseudo -> socket.id
+const onlineUids = new Set();     // uid actuellement connectés (anti double-connexion)
+const sessions = new Map();       // socket.id -> { uid, pseudo, isAdmin }
+const generalHistory = [];
 const privateHistory = new Map(); // "A|B" (trié) -> [messages]
-const leaderboard = new Map();  // pseudo -> meilleur score
+const leaderboard = new Map();
 let nextMsgId = 1;
 
 function privateKey(a, b) {
@@ -41,50 +65,49 @@ function getTopScores() {
 }
 
 io.on("connection", (socket) => {
-  let myPseudo = null;
-
-  socket.on("login_register", ({ pseudo, mdp }) => {
-    pseudo = String(pseudo).trim();
-
-    if (bannedUsers.has(pseudo)) {
-      return socket.emit("auth_response", { success: false, message: "Cet utilisateur est banni." });
+  socket.on("login_register", async ({ pseudo, token }) => {
+    let decoded;
+    try {
+      decoded = await admin.auth().verifyIdToken(token);
+    } catch (err) {
+      return socket.emit("auth_response", { success: false, message: "Session invalide, reconnecte-toi." });
     }
 
-    const existing = users.get(pseudo);
+    const uid = decoded.uid;
 
-    if (existing) {
-      // Utilisateur déjà enregistré : on vérifie le mot de passe
-      if (existing.mdp !== mdp) {
-        return socket.emit("auth_response", { success: false, message: "Mot de passe incorrect." });
-      }
-    } else {
-      // Nouvel utilisateur : on l'enregistre
-      users.set(pseudo, { mdp, isAdmin: SUPER_ADMINS.includes(pseudo) });
+    // Empêcher la double connexion du même compte
+    if (onlineUids.has(uid)) {
+      return socket.emit("auth_response", { success: false, message: "Ce compte est déjà connecté sur un autre appareil." });
     }
 
-    myPseudo = pseudo;
-    onlineSockets.set(pseudo, socket.id);
+    const finalPseudo = String(pseudo || users.get(uid) || uid).trim();
+    const isAdmin = uid === ADMIN_UID;
 
-    socket.emit("auth_response", {
-      success: true,
-      pseudo,
-      is_admin: users.get(pseudo).isAdmin
-    });
+    users.set(uid, finalPseudo);
+    onlineSockets.set(finalPseudo, socket.id);
+    onlineUids.add(uid);
+    sessions.set(socket.id, { uid, pseudo: finalPseudo, isAdmin });
 
+    socket.emit("auth_response", { success: true, pseudo: finalPseudo, is_admin: isAdmin });
     socket.emit("load_history", generalHistory);
     io.emit("update_users", getOnlineList());
   });
 
   socket.on("heartbeat", (pseudo) => {
-    if (pseudo) onlineSockets.set(pseudo, socket.id);
+    const session = sessions.get(socket.id);
+    if (session) onlineSockets.set(session.pseudo, socket.id);
   });
 
   // Message général OU privé (le client envoie toujours sur le même événement 'message')
   socket.on("message", (data) => {
-    if (!myPseudo) return;
+    const session = sessions.get(socket.id);
+    if (!session) return;
+
+    // On utilise le pseudo authentifié côté serveur, pas celui envoyé
+    // par le client, pour empêcher toute usurpation.
     const msg = {
       id: nextMsgId++,
-      user: data.user,
+      user: session.pseudo,
       text: data.text,
       type: data.type || "text",
       fileName: data.fileName || null,
@@ -95,12 +118,10 @@ io.on("connection", (socket) => {
       generalHistory.push(msg);
       io.emit("message", msg);
     } else {
-      // Message privé entre myPseudo et data.target
       const key = privateKey(msg.user, data.target);
       if (!privateHistory.has(key)) privateHistory.set(key, []);
       privateHistory.get(key).push(msg);
 
-      // Envoi à l'expéditeur ET au destinataire s'il est connecté
       socket.emit("private_message", msg);
       const targetSocketId = onlineSockets.get(data.target);
       if (targetSocketId) {
@@ -109,14 +130,17 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("get_private_history", ({ user, target }) => {
-    const key = privateKey(user, target);
+  socket.on("get_private_history", ({ target }) => {
+    const session = sessions.get(socket.id);
+    if (!session || !target) return;
+    const key = privateKey(session.pseudo, target);
     const history = privateHistory.get(key) || [];
     socket.emit("load_private_history", { target, history });
   });
 
   socket.on("delete_message", (id) => {
-    if (!myPseudo || !users.get(myPseudo)?.isAdmin) return;
+    const session = sessions.get(socket.id);
+    if (!session || !session.isAdmin) return;
 
     let removed = false;
     const idxG = generalHistory.findIndex((m) => m.id === id);
@@ -130,34 +154,64 @@ io.on("connection", (socket) => {
     if (removed) io.emit("message_deleted", id);
   });
 
-  socket.on("ban_user", ({ target, requester }) => {
-    const requesterData = users.get(requester);
-    if (!requesterData?.isAdmin) return;
-    if (SUPER_ADMINS.includes(target)) return; // protection des super-admins
+  socket.on("ban_user", async ({ target }) => {
+    const session = sessions.get(socket.id);
+    if (!session || !session.isAdmin) return;
 
-    bannedUsers.add(target);
+    const targetUid = Array.from(users.entries()).find(([u, p]) => p === target)?.[0];
+    if (!targetUid || targetUid === ADMIN_UID) return; // protection : impossible de bannir l'admin
+
+    try {
+      // Désactive le compte côté Firebase (empêche toute reconnexion)
+      await admin.auth().updateUser(targetUid, { disabled: true });
+      await admin.auth().revokeRefreshTokens(targetUid);
+    } catch (err) {
+      console.error("Erreur lors du ban Firebase :", err.message);
+    }
+
+    users.delete(targetUid);
+    onlineUids.delete(targetUid);
 
     const targetSocketId = onlineSockets.get(target);
     if (targetSocketId) {
       io.to(targetSocketId).emit("user_banned_notice", target);
       onlineSockets.delete(target);
+      sessions.delete(targetSocketId);
     }
     io.emit("update_users", getOnlineList());
+  });
+
+  // --- Mode admin : inspecter une conversation privée entre deux utilisateurs ---
+  socket.on("admin_get_private_history", ({ user1, user2 }) => {
+    const session = sessions.get(socket.id);
+    if (!session || !session.isAdmin) return;
+    if (!user1 || !user2 || user1 === user2) return;
+
+    const key = privateKey(user1, user2);
+    const history = privateHistory.get(key) || [];
+    socket.emit("load_admin_private_history", { user1, user2, history });
   });
 
   socket.on("get_leaderboard", () => {
     socket.emit("update_leaderboard", getTopScores());
   });
 
-  socket.on("save_score", ({ pseudo, score }) => {
-    const current = leaderboard.get(pseudo) || 0;
-    if (score > current) leaderboard.set(pseudo, score);
+  socket.on("save_score", ({ score }) => {
+    const session = sessions.get(socket.id);
+    if (!session) return;
+    const current = leaderboard.get(session.pseudo) || 0;
+    if (score > current) leaderboard.set(session.pseudo, score);
     io.emit("update_leaderboard", getTopScores());
   });
 
   socket.on("disconnect", () => {
-    if (myPseudo && onlineSockets.get(myPseudo) === socket.id) {
-      onlineSockets.delete(myPseudo);
+    const session = sessions.get(socket.id);
+    if (session) {
+      onlineUids.delete(session.uid);
+      if (onlineSockets.get(session.pseudo) === socket.id) {
+        onlineSockets.delete(session.pseudo);
+      }
+      sessions.delete(socket.id);
       io.emit("update_users", getOnlineList());
     }
   });
