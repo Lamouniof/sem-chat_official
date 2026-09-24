@@ -429,9 +429,16 @@
             const tabName = `🕵️ ${u1} ↔ ${u2}`;
             if (!conversations[tabName]) conversations[tabName] = [];
 
-            socket.emit('admin_get_private_history', { admin: myPseudo, user1: u1, user2: u2 });
+            // On demande l'historique au serveur
+            socket.emit('admin_get_private_history', { user1: u1, user2: u2 });
             switchTab(tabName);
         };
+
+        socket.on('load_admin_private_history', (d) => {
+            const tabName = `🕵️ ${d.user1} ↔ ${d.user2}`;
+            conversations[tabName] = d.history;
+            if (currentTab === tabName) renderMessages();
+        });
 
         window.deleteMsg = function(id) { if(confirm("Supprimer ?")) socket.emit('delete_message', id, myPseudo); };
         window.banUser = function(t) { if(confirm("Bannir " + t + " ?")) socket.emit('ban_user', {target: t, requester: myPseudo}); };
