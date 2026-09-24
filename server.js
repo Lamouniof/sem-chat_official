@@ -13,40 +13,55 @@ const io = new Server(server, {
 const PORT = process.env.PORT || 3000;
 
 // ============================================================
-// FIREBASE ADMIN — vérifie les tokens envoyés par le client au lieu
-// de comparer un mot de passe stocké en clair.
+// ADMIN : UID Firebase du compte admin (PAS un pseudo, PAS un
+// email — il n'y en a plus de vrai côté client).
 //
-// Sur Render : variable d'environnement FIREBASE_SERVICE_ACCOUNT
-// contenant le JSON COMPLET de la clé de service (jamais commité
-// sur GitHub — voir l'incident de sécurité qu'on vient de corriger).
-// En local : FIREBASE_CREDENTIALS_PATH pointant vers le fichier JSON
-// téléchargé (lui aussi à garder hors du repo, dans .gitignore).
+// Pour le trouver : connecte-toi une première fois avec le compte
+// à rendre admin, puis Firebase Console > Authentication > Users,
+// colonne "User UID". Colle la valeur dans la variable
+// d'environnement ADMIN_UID sur Render.
+//
+// Pour plusieurs admins : sépare les UID par des virgules,
+// ex. ADMIN_UID="uid1,uid2"
+// ============================================================
+const ADMIN_UIDS = (process.env.ADMIN_UID || "COLLE_ICI_L_UID_FIREBASE")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+// ============================================================
+// INITIALISATION FIREBASE ADMIN
+// Sur Render (production) : colle le JSON COMPLET de la clé de
+// service dans la variable d'environnement FIREBASE_SERVICE_ACCOUNT.
+// Ne commite JAMAIS ce fichier JSON sur GitHub — utilise UNIQUEMENT
+// cette variable d'environnement.
+//
+// En local pour développer (jamais en prod, jamais commité) :
+// FIREBASE_CREDENTIALS_PATH peut pointer vers un fichier local,
+// à condition qu'il soit dans .gitignore.
 // ============================================================
 let credential;
 if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-  credential = admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT));
+  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+  credential = admin.credential.cert(serviceAccount);
+} else if (process.env.FIREBASE_CREDENTIALS_PATH) {
+  credential = admin.credential.cert(require(path.resolve(process.env.FIREBASE_CREDENTIALS_PATH)));
 } else {
-  const credPath = process.env.FIREBASE_CREDENTIALS_PATH || "./firebase-service-account.json";
-  credential = admin.credential.cert(require(credPath));
+  throw new Error(
+    "Aucune credential Firebase trouvée. Définis FIREBASE_SERVICE_ACCOUNT (recommandé en prod) ou FIREBASE_CREDENTIALS_PATH (dev local uniquement)."
+  );
 }
-admin.initializeApp({ credential });
 
-// UID Firebase du compte admin (Firebase Console > Authentication > Users
-// > colonne "User UID"). Pas d'email, pas de pseudo : c'est le seul
-// identifiant fiable et non falsifiable depuis qu'on est passé en
-// connexion pseudo-only avec email fantôme.
-const ADMIN_UID = process.env.ADMIN_UID || "COLLE_ICI_L_UID_FIREBASE";
+admin.initializeApp({ credential });
 
 app.use(express.static(path.join(__dirname, "public")));
 
 // ---------- "Base de données" en mémoire (remise à zéro à chaque redémarrage) ----------
 const users = new Map();          // uid -> pseudo
 const onlineSockets = new Map();  // pseudo -> socket.id
-const onlineUids = new Set();     // uid actuellement connectés (anti double-connexion)
-const sessions = new Map();       // socket.id -> { uid, pseudo, isAdmin }
-const generalHistory = [];
+const generalHistory = [];        // messages du chat général
 const privateHistory = new Map(); // "A|B" (trié) -> [messages]
-const leaderboard = new Map();
+const leaderboard = new Map();    // pseudo -> meilleur score
 let nextMsgId = 1;
 
 function privateKey(a, b) {
@@ -65,6 +80,11 @@ function getTopScores() {
 }
 
 io.on("connection", (socket) => {
+  let myPseudo = null;
+  let myUid = null;
+  let myIsAdmin = false;
+
+  // Le client envoie maintenant { pseudo, token } au lieu de { pseudo, mdp }
   socket.on("login_register", async ({ pseudo, token }) => {
     let decoded;
     try {
@@ -76,17 +96,23 @@ io.on("connection", (socket) => {
     const uid = decoded.uid;
 
     // Empêcher la double connexion du même compte
-    if (onlineUids.has(uid)) {
-      return socket.emit("auth_response", { success: false, message: "Ce compte est déjà connecté sur un autre appareil." });
+    const knownPseudo = users.get(uid);
+    if (knownPseudo && onlineSockets.has(knownPseudo)) {
+      return socket.emit("auth_response", {
+        success: false,
+        message: "Ce compte est déjà connecté sur un autre appareil."
+      });
     }
 
-    const finalPseudo = String(pseudo || users.get(uid) || uid).trim();
-    const isAdmin = uid === ADMIN_UID;
+    const finalPseudo = String(pseudo || knownPseudo || uid).trim();
+    const isAdmin = ADMIN_UIDS.includes(uid);
 
     users.set(uid, finalPseudo);
+    myPseudo = finalPseudo;
+    myUid = uid;
+    myIsAdmin = isAdmin;
+
     onlineSockets.set(finalPseudo, socket.id);
-    onlineUids.add(uid);
-    sessions.set(socket.id, { uid, pseudo: finalPseudo, isAdmin });
 
     socket.emit("auth_response", { success: true, pseudo: finalPseudo, is_admin: isAdmin });
     socket.emit("load_history", generalHistory);
@@ -94,20 +120,15 @@ io.on("connection", (socket) => {
   });
 
   socket.on("heartbeat", (pseudo) => {
-    const session = sessions.get(socket.id);
-    if (session) onlineSockets.set(session.pseudo, socket.id);
+    if (pseudo) onlineSockets.set(pseudo, socket.id);
   });
 
   // Message général OU privé (le client envoie toujours sur le même événement 'message')
   socket.on("message", (data) => {
-    const session = sessions.get(socket.id);
-    if (!session) return;
-
-    // On utilise le pseudo authentifié côté serveur, pas celui envoyé
-    // par le client, pour empêcher toute usurpation.
+    if (!myPseudo) return;
     const msg = {
       id: nextMsgId++,
-      user: session.pseudo,
+      user: myPseudo, // toujours le pseudo authentifié côté serveur, jamais celui du client
       text: data.text,
       type: data.type || "text",
       fileName: data.fileName || null,
@@ -131,16 +152,23 @@ io.on("connection", (socket) => {
   });
 
   socket.on("get_private_history", ({ target }) => {
-    const session = sessions.get(socket.id);
-    if (!session || !target) return;
-    const key = privateKey(session.pseudo, target);
+    if (!myPseudo || !target) return;
+    const key = privateKey(myPseudo, target);
     const history = privateHistory.get(key) || [];
     socket.emit("load_private_history", { target, history });
   });
 
+  // --- Mode espion admin : consulter la conversation privée de deux autres utilisateurs ---
+  socket.on("admin_get_private_history", ({ user1, user2 }) => {
+    if (!myIsAdmin) return;
+    if (!user1 || !user2 || user1 === user2) return;
+    const key = privateKey(user1, user2);
+    const history = privateHistory.get(key) || [];
+    socket.emit("load_admin_private_history", { user1, user2, history });
+  });
+
   socket.on("delete_message", (id) => {
-    const session = sessions.get(socket.id);
-    if (!session || !session.isAdmin) return;
+    if (!myIsAdmin) return;
 
     let removed = false;
     const idxG = generalHistory.findIndex((m) => m.id === id);
@@ -155,63 +183,45 @@ io.on("connection", (socket) => {
   });
 
   socket.on("ban_user", async ({ target }) => {
-    const session = sessions.get(socket.id);
-    if (!session || !session.isAdmin) return;
+    if (!myIsAdmin) return;
 
-    const targetUid = Array.from(users.entries()).find(([u, p]) => p === target)?.[0];
-    if (!targetUid || targetUid === ADMIN_UID) return; // protection : impossible de bannir l'admin
-
-    try {
-      // Désactive le compte côté Firebase (empêche toute reconnexion)
-      await admin.auth().updateUser(targetUid, { disabled: true });
-      await admin.auth().revokeRefreshTokens(targetUid);
-    } catch (err) {
-      console.error("Erreur lors du ban Firebase :", err.message);
-    }
+    const targetEntry = [...users.entries()].find(([, p]) => p === target);
+    if (!targetEntry) return;
+    const [targetUid] = targetEntry;
+    if (ADMIN_UIDS.includes(targetUid)) return; // protection des admins
 
     users.delete(targetUid);
-    onlineUids.delete(targetUid);
 
     const targetSocketId = onlineSockets.get(target);
     if (targetSocketId) {
       io.to(targetSocketId).emit("user_banned_notice", target);
       onlineSockets.delete(target);
-      sessions.delete(targetSocketId);
     }
+
+    try {
+      await admin.auth().revokeRefreshTokens(targetUid);
+    } catch (err) {
+      // pas bloquant si ça échoue
+    }
+
     io.emit("update_users", getOnlineList());
-  });
-
-  // --- Mode admin : inspecter une conversation privée entre deux utilisateurs ---
-  socket.on("admin_get_private_history", ({ user1, user2 }) => {
-    const session = sessions.get(socket.id);
-    if (!session || !session.isAdmin) return;
-    if (!user1 || !user2 || user1 === user2) return;
-
-    const key = privateKey(user1, user2);
-    const history = privateHistory.get(key) || [];
-    socket.emit("load_admin_private_history", { user1, user2, history });
   });
 
   socket.on("get_leaderboard", () => {
     socket.emit("update_leaderboard", getTopScores());
   });
 
-  socket.on("save_score", ({ score }) => {
-    const session = sessions.get(socket.id);
-    if (!session) return;
-    const current = leaderboard.get(session.pseudo) || 0;
-    if (score > current) leaderboard.set(session.pseudo, score);
+  socket.on("save_score", (data) => {
+    if (!myPseudo) return;
+    const score = data.score || 0;
+    const current = leaderboard.get(myPseudo) || 0;
+    if (score > current) leaderboard.set(myPseudo, score);
     io.emit("update_leaderboard", getTopScores());
   });
 
   socket.on("disconnect", () => {
-    const session = sessions.get(socket.id);
-    if (session) {
-      onlineUids.delete(session.uid);
-      if (onlineSockets.get(session.pseudo) === socket.id) {
-        onlineSockets.delete(session.pseudo);
-      }
-      sessions.delete(socket.id);
+    if (myPseudo && onlineSockets.get(myPseudo) === socket.id) {
+      onlineSockets.delete(myPseudo);
       io.emit("update_users", getOnlineList());
     }
   });
