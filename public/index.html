@@ -152,11 +152,6 @@
         <ul id="user-list-offline" class="list-unstyled mb-0" style="opacity: 0.6;"></ul>
     </div>
 
-    <!-- Reste de la sidebar (Espion, Arcade, Déconnexion...) -->
-    <div id="admin-panel" class="p-3" style="display: none;">...</div>
-    ...
-</div>
-
                 <!-- BARRE D'ESPIONNAGE ADMIN -->
                 <div id="admin-panel" class="p-3" style="display: none;">
                     <div class="admin-panel-title">🕵️ ESPIONNER DES MP</div>
@@ -414,8 +409,20 @@
             renderTabs(); if(currentTab === partner) renderMessages();
         });
 
-        socket.on('update_users', (list) => {
-            const el = document.getElementById('user-list'); el.innerHTML = '';
+        socket.on('update_users', (data) => {
+            // Compat : si jamais le serveur renvoie encore un simple tableau (ancien format)
+            const onlineUsers = Array.isArray(data) ? data : (data.onlineUsers || []);
+            const offlineUsers = Array.isArray(data) ? [] : (data.offlineUsers || []);
+            const onlineCount = Array.isArray(data) ? data.length : (data.onlineCount ?? onlineUsers.length);
+
+            const counterEl = document.getElementById('online-counter');
+            if (counterEl) counterEl.textContent = `${onlineCount} en ligne`;
+
+            const elOnline = document.getElementById('user-list-online');
+            const elOffline = document.getElementById('user-list-offline');
+            if (elOnline) elOnline.innerHTML = '';
+            if (elOffline) elOffline.innerHTML = '';
+
             const sel1 = document.getElementById('admin-user1');
             const sel2 = document.getElementById('admin-user2');
             const val1 = sel1.value; const val2 = sel2.value;
@@ -423,13 +430,25 @@
             sel1.innerHTML = '<option value="">-- Utilisateur A --</option>';
             sel2.innerHTML = '<option value="">-- Utilisateur B --</option>';
 
-            list.forEach(u => {
+            const makeUserItem = (u, online) => {
                 const li = document.createElement('li'); li.className = 'user-item';
+                const dot = online ? '🟢' : '⚪';
                 let banBtn = (isAdmin && u !== myPseudo) ? `<button class="btn btn-sm btn-danger" onclick="banUser('${u}')">Ban</button>` : '';
-                li.innerHTML = `<span>${u} ${u === myPseudo ? '(Moi)' : ''}</span> ${banBtn}`;
-                if(u !== myPseudo) li.onclick = (e) => { if(e.target.tagName !== 'BUTTON') { if(!conversations[u]) { conversations[u] = []; socket.emit('get_private_history', {user: myPseudo, target: u}); } switchTab(u); } };
-                el.appendChild(li);
+                li.innerHTML = `<span>${dot} ${u} ${u === myPseudo ? '(Moi)' : ''}</span> ${banBtn}`;
+                if (online && u !== myPseudo) {
+                    li.onclick = (e) => { if(e.target.tagName !== 'BUTTON') { if(!conversations[u]) { conversations[u] = []; socket.emit('get_private_history', {user: myPseudo, target: u}); } switchTab(u); } };
+                }
+                return li;
+            };
 
+            onlineUsers.forEach(u => {
+                if (elOnline) elOnline.appendChild(makeUserItem(u, true));
+                sel1.innerHTML += `<option value="${u}">${u}</option>`;
+                sel2.innerHTML += `<option value="${u}">${u}</option>`;
+            });
+
+            offlineUsers.forEach(u => {
+                if (elOffline) elOffline.appendChild(makeUserItem(u, false));
                 sel1.innerHTML += `<option value="${u}">${u}</option>`;
                 sel2.innerHTML += `<option value="${u}">${u}</option>`;
             });
