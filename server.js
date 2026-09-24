@@ -189,35 +189,32 @@ io.on("connection", (socket) => {
     if (removed) io.emit("message_deleted", id);
   });
 
-  socket.on("ban_user", async ({ target }) => {
+ socket.on("ban_user", async ({ target }) => {
     if (!myIsAdmin) return;
 
-    // 1. Trouver l'UID Firebase associé au pseudo ciblé
     const targetEntry = [...users.entries()].find(([, p]) => p === target);
     if (!targetEntry) return;
     const [targetUid] = targetEntry;
 
-    // Protection : impossible de bannir un autre admin
-    if (ADMIN_UIDS.includes(targetUid)) return;
+    if (ADMIN_UIDS.includes(targetUid)) return; // Protection admin
 
-    // 2. Supprimer la session mémoire locale
+    // 1. Déconnexion immédiate du socket
     users.delete(targetUid);
-
     const targetSocketId = onlineSockets.get(target);
     if (targetSocketId) {
       io.to(targetSocketId).emit("user_banned_notice", target);
       onlineSockets.delete(target);
     }
 
-    // 3. Action définitive sur Firebase Authentication
+    // 2. SUPPRESSION DÉFINITIVE DANS FIREBASE
     try {
-
-      console.log(`[BAN] L'utilisateur ${target} (UID: ${targetUid}) a été banni définitivement.`);
+      // Option radicale : supprime le compte de Firebase Authentication
+      await admin.auth().deleteUser(targetUid);
+      console.log(`[BAN] Compte Firebase supprimé définitivement pour ${target} (${targetUid})`);
     } catch (err) {
-      console.error(`[BAN ERROR] Échec de la suspension Firebase pour ${target}:`, err.message);
+      console.error(`[BAN ERROR] Impossible de supprimer le compte Firebase :`, err.message);
     }
 
-    // 4. Mettre à jour la liste des utilisateurs en ligne pour tout le monde
     io.emit("update_users", getOnlineList());
   });
 
