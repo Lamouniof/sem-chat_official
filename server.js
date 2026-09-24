@@ -73,6 +73,7 @@ const FIREBASE_CACHE_TTL_MS = 2 * 60 * 1000; // on ne re-interroge Firebase Auth
 // vider la liste "hors ligne" en silence).
 let firebaseUsersCache = [];
 let firebaseCacheAt = 0;
+let firebaseLastError = null; // { code, message, at } — dernière erreur Firebase rencontrée, pour debug admin
 
 function privateKey(a, b) {
   return [a, b].sort().join("|");
@@ -87,11 +88,20 @@ async function refreshFirebaseUsersCache() {
     // liste complète qui permet d'afficher tous les pseudos existants comme "hors ligne"
     // dès le démarrage du serveur, avant même qu'aucun d'eux ne se connecte.
     const listUsersResult = await admin.auth().listUsers(1000);
+    const total = listUsersResult.users.length;
     firebaseUsersCache = listUsersResult.users
       .map(userRecord => userRecord.displayName)
       .filter(Boolean); // Filtre les pseudos non nuls
     firebaseCacheAt = Date.now();
+    firebaseLastError = null;
+
+    if (total > 0 && firebaseUsersCache.length === 0) {
+      // Cas particulier utile à savoir : des comptes existent mais AUCUN n'a de
+      // displayName renseigné (donc rien ne peut s'afficher côté "hors ligne").
+      console.warn(`[Firebase] ${total} compte(s) Firebase trouvé(s), mais aucun n'a de displayName défini.`);
+    }
   } catch (error) {
+    firebaseLastError = { code: error.code || null, message: error.message || String(error), at: Date.now() };
     console.error(
       "Erreur lors de la récupération des utilisateurs Firebase (on garde le dernier cache connu) :",
       error.code || "", error.message || error
@@ -120,6 +130,15 @@ function broadcastUserLists() {
     onlineCount: onlineList.length,
     onlineUsers: onlineList,
     offlineUsers: offlineList
+  });
+
+  // Info de debug envoyée à tout le monde ; seul le client admin l'affiche (voir index.html).
+  // Permet de voir la vraie cause d'un souci Firebase directement dans la console du
+  // navigateur, sans avoir besoin d'accéder aux logs du serveur (Render, etc.).
+  io.emit("firebase_debug", {
+    cacheSize: firebaseUsersCache.length,
+    lastRefreshAt: firebaseCacheAt,
+    lastError: firebaseLastError
   });
 }
 
