@@ -8,19 +8,60 @@
 
     <style>
         body { background: #0f0c29; height: 100vh; display: flex; align-items: center; justify-content: center; font-family: 'Segoe UI', sans-serif; margin: 0; color: white; overflow: hidden; }
-        #auth-box { background: white; padding: 2.5rem; border-radius: 20px; width: 380px; color: #333; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        
+        /* Auth box moderne avec animations */
+        #auth-box { 
+            background: white; 
+            padding: 2.5rem; 
+            border-radius: 20px; 
+            width: 380px; 
+            color: #333; 
+            box-shadow: 0 15px 35px rgba(0,0,0,0.4); 
+            transition: all 0.3s ease-in-out;
+        }
+
+        .auth-tabs { display: flex; margin-bottom: 1.5rem; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; background: #f8fafc; }
+        .auth-tab-btn { 
+            flex: 1; 
+            padding: 10px; 
+            text-align: center; 
+            cursor: pointer; 
+            background: transparent; 
+            font-weight: 600; 
+            font-size: 0.9rem; 
+            color: #64748b;
+            transition: all 0.25s ease;
+        }
+        .auth-tab-btn.active { background: #4361ee; color: white; box-shadow: 0 4px 12px rgba(67, 97, 238, 0.3); }
+
+        .auth-form-container {
+            display: flex;
+            flex-direction: column;
+            animation: fadeIn 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        #auth-error { color: #ef4444; font-size: 0.85rem; margin-top: -0.5rem; margin-bottom: 1rem; display: none; font-weight: 500; }
+
+        /* Style Chat */
         #chat-area { display: none; width: 98%; max-width: 1300px; height: 92vh; background: white; border-radius: 25px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.6); position: relative; }
         .main-container { display: flex; width: 100%; height: 100%; }
         .sidebar { width: 300px; background: #1a1a2e; color: white; display: flex; flex-direction: column; border-right: 1px solid #2d2d44; }
         .chat-main { flex-grow: 1; display: flex; flex-direction: column; background: #f8f9fa; color: #333; position: relative; }
         .sidebar-header { padding: 20px; background: #16213e; font-weight: bold; text-align: center; }
         #user-list { padding: 15px; list-style: none; overflow-y: auto; flex-grow: 1; margin: 0; }
-        .user-item { padding: 10px; margin-bottom: 8px; border-radius: 12px; background: rgba(255,255,255,0.05); cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+        .user-item { padding: 10px; margin-bottom: 8px; border-radius: 12px; background: rgba(255,255,255,0.05); cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: background 0.2s; }
         .user-item:hover { background: rgba(255,255,255,0.15); }
         .chat-nav { background: #e9ecef; display: flex; padding: 10px 20px; gap: 10px; border-bottom: 1px solid #ddd; overflow-x: auto; }
-        .tab { padding: 8px 20px; background: #dee2e6; border-radius: 20px; cursor: pointer; font-size: 0.85rem; font-weight: bold; position: relative; white-space: nowrap; }
+        .tab { padding: 8px 16px; background: #dee2e6; border-radius: 20px; cursor: pointer; font-size: 0.85rem; font-weight: bold; position: relative; white-space: nowrap; display: flex; align-items: center; gap: 6px; transition: all 0.2s; }
         .tab.active { background: #4361ee; color: white; }
-        .notif-badge { position: absolute; top: -8px; right: -8px; background: #ff4d4d; color: white; border-radius: 50%; padding: 2px 7px; font-size: 0.7rem; border: 2px solid white; }
+        .tab-close-btn { margin-left: 4px; font-weight: bold; opacity: 0.6; padding: 0 4px; border-radius: 50%; }
+        .tab-close-btn:hover { opacity: 1; background: rgba(0,0,0,0.15); color: #ff4d4d; }
+        .notif-badge { background: #ff4d4d; color: white; border-radius: 50%; padding: 2px 7px; font-size: 0.7rem; border: 2px solid white; }
         #chat-window { flex-grow: 1; padding: 25px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
         .message-wrapper { max-width: 75%; display: flex; flex-direction: column; }
         .msg-bubble { padding: 10px 15px; border-radius: 18px; font-size: 0.9rem; }
@@ -30,13 +71,7 @@
         .btn-delete { color: #ff4d4d; cursor: pointer; font-size: 0.7rem; margin-left: 10px; visibility: hidden; }
         .message-wrapper:hover .btn-delete { visibility: visible; }
 
-        /* Auth box */
-        .auth-tabs { display: flex; margin-bottom: 1.5rem; border-radius: 12px; overflow: hidden; border: 1px solid #ddd; }
-        .auth-tab-btn { flex: 1; padding: 10px; text-align: center; cursor: pointer; background: #f1f1f1; font-weight: bold; font-size: 0.9rem; }
-        .auth-tab-btn.active { background: #4361ee; color: white; }
-        #auth-error { color: #ff4d4d; font-size: 0.85rem; margin-top: -0.5rem; margin-bottom: 1rem; display: none; }
-
-        /* Panneau Admin Espionnage */
+        /* Panneau Admin */
         #admin-panel { background: #16213e; border-top: 2px solid #ff4d4d; }
         #admin-panel .admin-panel-title { color: #ff4d4d; font-weight: bold; margin-bottom: 8px; font-size: 0.85rem; }
 
@@ -62,7 +97,7 @@
 <body>
 
     <div id="auth-box">
-        <h2 class="text-center mb-4" style="color: #4361ee; font-weight: bold;">Sem-chat</h2>
+        <h2 class="text-center mb-4" style="color: #4361ee; font-weight: bold; letter-spacing: -0.5px;">Sem-chat</h2>
 
         <div class="auth-tabs">
             <div class="auth-tab-btn active" id="tab-login" onclick="switchAuthTab('login')">Connexion</div>
@@ -71,10 +106,11 @@
 
         <div id="auth-error"></div>
 
-        <input type="text" id="pseudo" class="form-control mb-3" placeholder="Pseudo">
-        <input type="password" id="mdp" class="form-control mb-4" placeholder="Mot de passe">
-
-        <button class="btn btn-primary w-100" id="auth-submit-btn" onclick="handleAuthSubmit()">Entrer</button>
+        <div class="auth-form-container" id="auth-form">
+            <input type="text" id="pseudo" class="form-control mb-3" placeholder="Pseudo" onkeydown="handleAuthKeyDown(event)">
+            <input type="password" id="mdp" class="form-control mb-4" placeholder="Mot de passe" onkeydown="handleAuthKeyDown(event)">
+            <button class="btn btn-primary w-100 py-2 fw-semibold" id="auth-submit-btn" onclick="handleAuthSubmit()">Entrer</button>
+        </div>
     </div>
 
     <div id="chat-area">
@@ -141,13 +177,6 @@
         </div>
     </div>
 
-    <!-- ============================================================
-         FIREBASE — SDK modulaire (v9+) via ESM. L'utilisateur ne voit
-         jamais d'email : on en fabrique un "fantôme" à partir du
-         pseudo pour que Firebase Authentication puisse gérer le
-         compte en coulisses. On expose sur window ce dont le script
-         classique plus bas a besoin.
-         ============================================================ -->
     <!-- Script principal unique en type="module" -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -187,13 +216,28 @@
             return `${base}-${suffix}@sem-chat.local`;
         }
 
-        // --- EXPOSITION DES FONCTIONS SUR WINDOW ---
+        // --- GESTION DE L'AUTHENTIFICATION & ANIMATIONS ---
         window.switchAuthTab = function(mode) {
+            if (authMode === mode) return;
             authMode = mode;
+            
             document.getElementById('tab-login').classList.toggle('active', mode === 'login');
             document.getElementById('tab-register').classList.toggle('active', mode === 'register');
             document.getElementById('auth-submit-btn').innerText = mode === 'register' ? "Créer mon compte" : "Entrer";
             document.getElementById('auth-error').style.display = 'none';
+
+            // Animation du formulaire
+            const formContainer = document.getElementById('auth-form');
+            formContainer.style.animation = 'none';
+            formContainer.offsetHeight; // force reflow
+            formContainer.style.animation = 'fadeIn 0.35s cubic-bezier(0.4, 0, 0.2, 1)';
+        };
+
+        window.handleAuthKeyDown = function(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                handleAuthSubmit();
+            }
         };
 
         window.showAuthError = function(msg) {
@@ -306,12 +350,34 @@
         window.renderTabs = function() {
             const container = document.getElementById('chat-tabs');
             container.innerHTML = `<div class="tab ${currentTab === 'Général' ? 'active' : ''}" onclick="switchTab('Général')">🌍 Général ${unreadCounts['Général'] ? `<span class="notif-badge">${unreadCounts['Général']}</span>` : ''}</div>`;
+            
             Object.keys(conversations).forEach(name => {
                 if(name !== 'Général') {
                     const icon = name.startsWith('🕵️') ? '' : '👤 ';
-                    container.innerHTML += `<div class="tab ${currentTab === name ? 'active' : ''}" onclick="switchTab('${name}')">${icon}${name} ${unreadCounts[name] ? `<span class="notif-badge">${unreadCounts[name]}</span>` : ''} <span class="ms-2" onclick="event.stopPropagation(); delete conversations['${name}']; switchTab('Général')">×</span></div>`;
+                    const isTabActive = currentTab === name ? 'active' : '';
+                    const notifHtml = unreadCounts[name] ? `<span class="notif-badge">${unreadCounts[name]}</span>` : '';
+                    
+                    container.innerHTML += `
+                        <div class="tab ${isTabActive}" onclick="switchTab('${name}')">
+                            <span>${icon}${name}</span>
+                            ${notifHtml}
+                            <span class="tab-close-btn" onclick="closeTab(event, '${name}')">&times;</span>
+                        </div>
+                    `;
                 }
             });
+        };
+
+        window.closeTab = function(event, tabName) {
+            event.stopPropagation();
+            delete conversations[tabName];
+            delete unreadCounts[tabName];
+
+            if (currentTab === tabName) {
+                switchTab('Général');
+            } else {
+                renderTabs();
+            }
         };
 
         window.switchTab = function(t) { currentTab = t; unreadCounts[t] = 0; renderTabs(); renderMessages(); };
@@ -367,12 +433,6 @@
             switchTab(tabName);
         };
 
-        socket.on('load_admin_private_history', (d) => {
-            const tabName = `🕵️ ${d.user1} ↔ ${d.user2}`;
-            conversations[tabName] = d.history;
-            if (currentTab === tabName) renderMessages();
-        });
-
         window.deleteMsg = function(id) { if(confirm("Supprimer ?")) socket.emit('delete_message', id, myPseudo); };
         window.banUser = function(t) { if(confirm("Bannir " + t + " ?")) socket.emit('ban_user', {target: t, requester: myPseudo}); };
         socket.on('message_deleted', (id) => { for(let k in conversations) conversations[k] = conversations[k].filter(m => m.id !== id); renderMessages(); });
@@ -381,7 +441,7 @@
         socket.on('load_private_history', (d) => { conversations[d.target] = d.history; if(currentTab === d.target) renderMessages(); });
         
         window.sendMsg = function() { const i = document.getElementById('msg'); if (i.value.trim() !== "") { socket.emit('message', {user: myPseudo, text: i.value, type: 'text', target: currentTab}); i.value = ""; } };
-        document.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMsg(); });
+        document.addEventListener("keypress", (e) => { if (e.key === "Enter" && document.activeElement.id === 'msg') sendMsg(); });
 
         // --- SNAKE MINI ---
         let snakeInterval, isPaused = false, snakeDirection = "RIGHT", nextDirection = "RIGHT";
