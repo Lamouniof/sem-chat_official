@@ -148,6 +148,7 @@
          compte en coulisses. On expose sur window ce dont le script
          classique plus bas a besoin.
          ============================================================ -->
+    <!-- Script principal unique en type="module" -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-analytics.js";
@@ -171,13 +172,10 @@
         };
 
         const fbApp = initializeApp(firebaseConfig);
-        try { getAnalytics(fbApp); } catch (e) { /* analytics bloqué (adblock) : pas grave */ }
+        try { getAnalytics(fbApp); } catch (e) {}
 
         const auth = getAuth(fbApp);
 
-        // Transforme un pseudo en "email fantôme" déterministe, jamais
-        // montré à l'utilisateur, uniquement utilisé pour parler à
-        // Firebase (qui exige un identifiant au format email).
         function pseudoToFakeEmail(pseudo) {
             const clean = pseudo.trim().toLowerCase();
             const base = clean.replace(/[^a-z0-9]/g, '') || 'u';
@@ -189,33 +187,22 @@
             return `${base}-${suffix}@sem-chat.local`;
         }
 
-        window.fbPseudoToFakeEmail = pseudoToFakeEmail;
-        window.fbSignIn = (pseudo, mdp) => signInWithEmailAndPassword(auth, pseudoToFakeEmail(pseudo), mdp);
-        window.fbSignUp = (pseudo, mdp) => createUserWithEmailAndPassword(auth, pseudoToFakeEmail(pseudo), mdp);
-        window.fbUpdateProfile = (user, profile) => updateProfile(user, profile);
-        window.fbSignOut = () => signOut(auth);
-        window.fbOnAuthStateChanged = (callback) => onAuthStateChanged(auth, callback);
-    </script>
-
-    <script>
-        let authMode = "login";
-        let pendingPseudo = ""; // pseudo tapé, conservé le temps que Firebase confirme la connexion
-
-        function switchAuthTab(mode) {
+        // --- EXPOSITION DES FONCTIONS SUR WINDOW ---
+        window.switchAuthTab = function(mode) {
             authMode = mode;
             document.getElementById('tab-login').classList.toggle('active', mode === 'login');
             document.getElementById('tab-register').classList.toggle('active', mode === 'register');
             document.getElementById('auth-submit-btn').innerText = mode === 'register' ? "Créer mon compte" : "Entrer";
             document.getElementById('auth-error').style.display = 'none';
-        }
+        };
 
-        function showAuthError(msg) {
+        window.showAuthError = function(msg) {
             const el = document.getElementById('auth-error');
             el.innerText = msg;
             el.style.display = 'block';
-        }
+        };
 
-        function handleAuthSubmit() {
+        window.handleAuthSubmit = function() {
             const pseudo = document.getElementById('pseudo').value.trim();
             const mdp = document.getElementById('mdp').value;
 
@@ -225,28 +212,20 @@
             pendingPseudo = pseudo;
 
             if (authMode === 'register') {
-    window.fbSignUp(pseudo, mdp)
-        .then((cred) => {
-            return window.fbUpdateProfile(cred.user, { displayName: pseudo });
-        })
-        .then(() => {
-            // Force la réémission après la mise à jour du profil si nécessaire
-            auth.currentUser.getIdToken(true).then((idToken) => {
-                socket.emit('login_register', { pseudo: pseudo, token: idToken });
-            });
-        })
-        .catch((err) => showAuthError(traduireErreur(err)));
-} else {
-                window.fbSignIn(pseudo, mdp)
+                createUserWithEmailAndPassword(auth, pseudoToFakeEmail(pseudo), mdp)
+                    .then((cred) => updateProfile(cred.user, { displayName: pseudo }))
+                    .catch((err) => showAuthError(traduireErreur(err)));
+            } else {
+                signInWithEmailAndPassword(auth, pseudoToFakeEmail(pseudo), mdp)
                     .catch((err) => showAuthError(traduireErreur(err)));
             }
-        }
+        };
 
         function traduireErreur(err) {
             switch (err.code) {
                 case 'auth/email-already-in-use': return "Ce pseudo est déjà pris.";
                 case 'auth/weak-password': return "Mot de passe trop court (6 caractères min).";
-                case 'auth/unauthorized-domain': return "Ce domaine n'est pas autorisé dans Firebase (Authentication > Settings > Authorized domains).";
+                case 'auth/unauthorized-domain': return "Ce domaine n'est pas autorisé dans Firebase.";
                 case 'auth/user-not-found':
                 case 'auth/wrong-password':
                 case 'auth/invalid-credential': return "Pseudo ou mot de passe incorrect.";
@@ -254,30 +233,28 @@
             }
         }
 
-        function logout() {
-            window.fbSignOut().then(() => location.reload());
-        }
+        window.logout = function() {
+            signOut(auth).then(() => location.reload());
+        };
 
+        // --- LOGIQUE SOCKET.IO ET CHAT ---
+        let authMode = "login";
+        let pendingPseudo = "";
         const socket = io();
         let myPseudo = "", isAdmin = false, currentTab = "Général";
         let conversations = { "Général": [] };
         let unreadCounts = {};
 
-        window.fbOnAuthStateChanged((user) => {
-    if (user) {
-        user.getIdToken().then((idToken) => {
-            // Utilise user.displayName s'il existe, sinon bascule sur pendingPseudo
-            const pseudoToSend = user.displayName || pendingPseudo;
-            
-            if (pseudoToSend) {
-                socket.emit('login_register', {
-                    pseudo: pseudoToSend,
-                    token: idToken
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                user.getIdToken().then((idToken) => {
+                    socket.emit('login_register', {
+                        pseudo: user.displayName || pendingPseudo,
+                        token: idToken
+                    });
                 });
             }
         });
-    }
-});
 
         socket.on('auth_response', (data) => {
             if (data.success) {
@@ -294,11 +271,11 @@
                 setInterval(() => socket.emit('heartbeat', myPseudo), 15000);
             } else {
                 showAuthError(data.message || "Connexion refusée par le serveur.");
-                window.fbSignOut();
+                signOut(auth);
             }
         });
 
-        function renderMessages() {
+        window.renderMessages = function() {
             const container = document.getElementById('chat-window');
             container.innerHTML = '';
             (conversations[currentTab] || []).forEach(m => {
@@ -311,9 +288,9 @@
                 container.appendChild(wrapper);
             });
             container.scrollTop = container.scrollHeight;
-        }
+        };
 
-        function sendFile(input) {
+        window.sendFile = function(input) {
             if (input.files[0]) {
                 const file = input.files[0];
                 const reader = new FileReader();
@@ -324,9 +301,9 @@
                 reader.readAsDataURL(file);
                 input.value = "";
             }
-        }
+        };
 
-        function renderTabs() {
+        window.renderTabs = function() {
             const container = document.getElementById('chat-tabs');
             container.innerHTML = `<div class="tab ${currentTab === 'Général' ? 'active' : ''}" onclick="switchTab('Général')">🌍 Général ${unreadCounts['Général'] ? `<span class="notif-badge">${unreadCounts['Général']}</span>` : ''}</div>`;
             Object.keys(conversations).forEach(name => {
@@ -335,9 +312,9 @@
                     container.innerHTML += `<div class="tab ${currentTab === name ? 'active' : ''}" onclick="switchTab('${name}')">${icon}${name} ${unreadCounts[name] ? `<span class="notif-badge">${unreadCounts[name]}</span>` : ''} <span class="ms-2" onclick="event.stopPropagation(); delete conversations['${name}']; switchTab('Général')">×</span></div>`;
                 }
             });
-        }
+        };
 
-        function switchTab(t) { currentTab = t; unreadCounts[t] = 0; renderTabs(); renderMessages(); }
+        window.switchTab = function(t) { currentTab = t; unreadCounts[t] = 0; renderTabs(); renderMessages(); };
 
         socket.on('message', (d) => {
             conversations["Général"].push(d);
@@ -355,7 +332,6 @@
 
         socket.on('update_users', (list) => {
             const el = document.getElementById('user-list'); el.innerHTML = '';
-
             const sel1 = document.getElementById('admin-user1');
             const sel2 = document.getElementById('admin-user2');
             const val1 = sel1.value; const val2 = sel2.value;
@@ -377,7 +353,7 @@
             sel1.value = val1; sel2.value = val2;
         });
 
-        function adminInspectConversation() {
+        window.adminInspectConversation = function() {
             const u1 = document.getElementById('admin-user1').value;
             const u2 = document.getElementById('admin-user2').value;
 
@@ -389,7 +365,7 @@
 
             socket.emit('admin_get_private_history', { admin: myPseudo, user1: u1, user2: u2 });
             switchTab(tabName);
-        }
+        };
 
         socket.on('load_admin_private_history', (d) => {
             const tabName = `🕵️ ${d.user1} ↔ ${d.user2}`;
@@ -397,22 +373,20 @@
             if (currentTab === tabName) renderMessages();
         });
 
-        function deleteMsg(id) { if(confirm("Supprimer ?")) socket.emit('delete_message', id, myPseudo); }
-        function banUser(t) { if(confirm("Bannir " + t + " ?")) socket.emit('ban_user', {target: t, requester: myPseudo}); }
+        window.deleteMsg = function(id) { if(confirm("Supprimer ?")) socket.emit('delete_message', id, myPseudo); };
+        window.banUser = function(t) { if(confirm("Bannir " + t + " ?")) socket.emit('ban_user', {target: t, requester: myPseudo}); };
         socket.on('message_deleted', (id) => { for(let k in conversations) conversations[k] = conversations[k].filter(m => m.id !== id); renderMessages(); });
         socket.on('user_banned_notice', (t) => { if(myPseudo === t) { alert("Banni !"); location.reload(); } });
         socket.on('load_history', (h) => { conversations["Général"] = h; renderMessages(); });
         socket.on('load_private_history', (d) => { conversations[d.target] = d.history; if(currentTab === d.target) renderMessages(); });
-        function sendMsg() { const i = document.getElementById('msg'); if (i.value.trim() !== "") { socket.emit('message', {user: myPseudo, text: i.value, type: 'text', target: currentTab}); i.value = ""; } }
+        
+        window.sendMsg = function() { const i = document.getElementById('msg'); if (i.value.trim() !== "") { socket.emit('message', {user: myPseudo, text: i.value, type: 'text', target: currentTab}); i.value = ""; } };
         document.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMsg(); });
 
-        // --- SNAKE MINI + LEADERBOARD ---
-        let snakeInterval;
-        let isPaused = false;
-        let snakeDirection = "RIGHT";
-        let nextDirection = "RIGHT";
+        // --- SNAKE MINI ---
+        let snakeInterval, isPaused = false, snakeDirection = "RIGHT", nextDirection = "RIGHT";
 
-        function toggleSnake() {
+        window.toggleSnake = function() {
             const overlay = document.getElementById('snake-overlay');
             if(overlay.style.display === 'flex') {
                 overlay.style.display = 'none';
@@ -424,7 +398,7 @@
                 socket.emit('get_leaderboard');
                 startSnake();
             }
-        }
+        };
 
         socket.on('update_leaderboard', (scores) => {
             const list = document.getElementById('leaderboard-list');
@@ -444,7 +418,7 @@
             if(e.keyCode === 32) { isPaused = !isPaused; e.preventDefault(); }
         }
 
-        function startSnake() {
+        window.startSnake = function() {
             const canvas = document.getElementById("snake-canvas");
             const ctx = canvas.getContext("2d");
             const box = 16;
@@ -488,7 +462,7 @@
                 snake.unshift({x: snakeX, y: snakeY});
             }
             snakeInterval = setInterval(draw, 100);
-        }
+        };
     </script>
 </body>
 </html>
