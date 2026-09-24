@@ -59,10 +59,13 @@ app.use(express.static(path.join(__dirname, "public")));
 // ---------- "Base de données" en mémoire (remise à zéro à chaque redémarrage) ----------
 const users = new Map();          // uid -> pseudo
 const onlineSockets = new Map();  // pseudo -> socket.id
+const lastActivity = new Map();   // pseudo -> timestamp (ms) de la dernière activité réelle
 const generalHistory = [];        // messages du chat général
 const privateHistory = new Map(); // "A|B" (trié) -> [messages]
 const leaderboard = new Map();    // pseudo -> meilleur score
 let nextMsgId = 1;
+
+const INACTIVITY_MS = 5 * 60 * 1000; // 5 minutes sans activité réelle => affiché "hors ligne"
 
 function privateKey(a, b) {
   return [a, b].sort().join("|");
@@ -70,13 +73,22 @@ function privateKey(a, b) {
 
 // Fonction pour récupérer les membres en ligne et hors ligne depuis Firebase Auth
 async function sendUserLists() {
-  // La liste "en ligne" ne dépend que des sockets connectés : on l'envoie
-  // toujours, même si l'appel Firebase ci-dessous échoue.
-  const onlineList = Array.from(onlineSockets.keys());
+  const now = Date.now();
+
+  // "En ligne" = socket connecté ET activité réelle (souris/clavier/message) il y a moins
+  // de 5 minutes. Un socket connecté mais inactif depuis plus de 5 min bascule en "hors ligne"
+  // dans l'affichage, sans pour autant être déconnecté.
+  const onlineList = Array.from(onlineSockets.keys()).filter((pseudo) => {
+    const last = lastActivity.get(pseudo) || 0;
+    return now - last < INACTIVITY_MS;
+  });
+
   let offlineList = [];
 
   try {
-    // Récupérer tous les comptes Firebase Auth (limite à 1000 utilisateurs)
+    // Récupérer TOUS les comptes Firebase Auth (limite à 1000 utilisateurs) : c'est cette
+    // liste complète qui permet d'afficher tous les pseudos existants comme "hors ligne"
+    // dès le démarrage du serveur, avant même qu'aucun d'eux ne se connecte.
     const listUsersResult = await admin.auth().listUsers(1000);
 
     // Extraire les pseudos (displayName) de tous les comptes Firebase
@@ -84,7 +96,7 @@ async function sendUserLists() {
       .map(userRecord => userRecord.displayName)
       .filter(Boolean); // Filtre les pseudos non nuls
 
-    // Membres hors ligne = comptes Firebase qui ne sont pas dans la liste des connectés
+    // Hors ligne = tout compte Firebase qui n'est pas actuellement dans la liste "en ligne"
     offlineList = allFirebaseUsers.filter(pseudo => !onlineList.includes(pseudo));
   } catch (error) {
     // On log l'erreur mais on continue : au moins la liste "en ligne" doit s'afficher
@@ -143,6 +155,7 @@ io.on("connection", (socket) => {
   myIsAdmin = isAdmin;
 
   onlineSockets.set(finalPseudo, socket.id);
+  lastActivity.set(finalPseudo, Date.now());
 
   socket.emit("auth_response", { success: true, pseudo: finalPseudo, is_admin: isAdmin });
   socket.emit("load_history", generalHistory);
@@ -150,12 +163,20 @@ io.on("connection", (socket) => {
 });
 
   socket.on("heartbeat", (pseudo) => {
+    // Le heartbeat garde juste le socket "connu" ; il ne compte PAS comme
+    // activité réelle (sinon le statut "inactif depuis 5 min" ne marcherait jamais).
     if (pseudo) onlineSockets.set(pseudo, socket.id);
+  });
+
+  // Émis par le client sur une vraie interaction (souris, clavier, clic...), throttlé côté client.
+  socket.on("activity", () => {
+    if (myPseudo) lastActivity.set(myPseudo, Date.now());
   });
 
   // Message général OU privé (le client envoie toujours sur le même événement 'message')
   socket.on("message", (data) => {
     if (!myPseudo) return;
+    lastActivity.set(myPseudo, Date.now());
     const msg = {
       id: nextMsgId++,
       user: myPseudo, // toujours le pseudo authentifié côté serveur, jamais celui du client
@@ -267,4 +288,13 @@ io.on("connection", (socket) => {
 
 server.listen(PORT, () => {
   console.log(`Sem-chat démarré sur le port ${PORT}`);
+
+  // Charge immédiatement tous les pseudos Firebase au démarrage : ils apparaissent
+  // tous en "hors ligne" avant même qu'un seul utilisateur ne se connecte.
+  sendUserLists();
+
+  // Rafraîchit périodiquement la liste : ça permet de basculer automatiquement en
+  // "hors ligne" quelqu'un d'inactif depuis 5 min, et de détecter les nouveaux
+  // comptes Firebase créés depuis le dernier appel, sans attendre un login/logout.
+  setInterval(sendUserLists, 30 * 1000);
 });
