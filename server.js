@@ -86,38 +86,40 @@ io.on("connection", (socket) => {
 
   // Le client envoie maintenant { pseudo, token } au lieu de { pseudo, mdp }
   socket.on("login_register", async ({ pseudo, token }) => {
-    let decoded;
-    try {
-      decoded = await admin.auth().verifyIdToken(token);
-    } catch (err) {
-      return socket.emit("auth_response", { success: false, message: "Session invalide, reconnecte-toi." });
-    }
+  let decoded;
+  try {
+    decoded = await admin.auth().verifyIdToken(token);
+  } catch (err) {
+    return socket.emit("auth_response", { success: false, message: "Session invalide, reconnecte-toi." });
+  }
 
-    const uid = decoded.uid;
+  const uid = decoded.uid;
 
-    // Empêcher la double connexion du même compte
-    const knownPseudo = users.get(uid);
-    if (knownPseudo && onlineSockets.has(knownPseudo)) {
-      return socket.emit("auth_response", {
-        success: false,
-        message: "Ce compte est déjà connecté sur un autre appareil."
-      });
-    }
+  // On récupère le pseudo : soit celui envoyé, soit celui déjà stocké en mémoire, soit le nom Firebase
+  const knownPseudo = users.get(uid);
+  const finalPseudo = String(pseudo || knownPseudo || decoded.name || "Utilisateur_" + uid.substring(0, 5)).trim();
 
-    const finalPseudo = String(pseudo || knownPseudo || uid).trim();
-    const isAdmin = ADMIN_UIDS.includes(uid);
+  // Vérification de double connexion
+  if (onlineSockets.has(finalPseudo) && onlineSockets.get(finalPseudo) !== socket.id) {
+    return socket.emit("auth_response", {
+      success: false,
+      message: "Ce compte est déjà connecté sur un autre appareil."
+    });
+  }
 
-    users.set(uid, finalPseudo);
-    myPseudo = finalPseudo;
-    myUid = uid;
-    myIsAdmin = isAdmin;
+  const isAdmin = ADMIN_UIDS.includes(uid);
 
-    onlineSockets.set(finalPseudo, socket.id);
+  users.set(uid, finalPseudo);
+  myPseudo = finalPseudo;
+  myUid = uid;
+  myIsAdmin = isAdmin;
 
-    socket.emit("auth_response", { success: true, pseudo: finalPseudo, is_admin: isAdmin });
-    socket.emit("load_history", generalHistory);
-    io.emit("update_users", getOnlineList());
-  });
+  onlineSockets.set(finalPseudo, socket.id);
+
+  socket.emit("auth_response", { success: true, pseudo: finalPseudo, is_admin: isAdmin });
+  socket.emit("load_history", generalHistory);
+  io.emit("update_users", getOnlineList());
+});
 
   socket.on("heartbeat", (pseudo) => {
     if (pseudo) onlineSockets.set(pseudo, socket.id);
