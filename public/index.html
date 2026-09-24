@@ -20,8 +20,23 @@
             transition: all 0.3s ease-in-out;
         }
 
-        .auth-tabs { display: flex; margin-bottom: 1.5rem; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; background: #f8fafc; }
+        .auth-tabs { display: flex; margin-bottom: 1.5rem; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; background: #f8fafc; position: relative; }
+        .auth-tab-indicator {
+            position: absolute;
+            top: 0; left: 0;
+            width: 50%;
+            height: 100%;
+            background: #4361ee;
+            box-shadow: 0 4px 12px rgba(67, 97, 238, 0.3);
+            transition: transform 0.35s cubic-bezier(0.65, 0, 0.35, 1);
+            transform: translateX(0%);
+            z-index: 0;
+            will-change: transform;
+        }
+        .auth-tab-indicator.register { transform: translateX(100%); }
         .auth-tab-btn { 
+            position: relative;
+            z-index: 1;
             flex: 1; 
             padding: 10px; 
             text-align: center; 
@@ -30,9 +45,9 @@
             font-weight: 600; 
             font-size: 0.9rem; 
             color: #64748b;
-            transition: all 0.25s ease;
+            transition: color 0.25s ease;
         }
-        .auth-tab-btn.active { background: #4361ee; color: white; box-shadow: 0 4px 12px rgba(67, 97, 238, 0.3); }
+        .auth-tab-btn.active { color: white; }
 
         .auth-form-container {
             display: flex;
@@ -100,6 +115,7 @@
         <h2 class="text-center mb-4" style="color: #4361ee; font-weight: bold; letter-spacing: -0.5px;">Sem-chat</h2>
 
         <div class="auth-tabs">
+            <div class="auth-tab-indicator" id="auth-tab-indicator"></div>
             <div class="auth-tab-btn active" id="tab-login" onclick="switchAuthTab('login')">Connexion</div>
             <div class="auth-tab-btn" id="tab-register" onclick="switchAuthTab('register')">Inscription</div>
         </div>
@@ -235,6 +251,7 @@
             
             document.getElementById('tab-login').classList.toggle('active', mode === 'login');
             document.getElementById('tab-register').classList.toggle('active', mode === 'register');
+            document.getElementById('auth-tab-indicator').classList.toggle('register', mode === 'register');
             document.getElementById('auth-submit-btn').innerText = mode === 'register' ? "Créer mon compte" : "Entrer";
             document.getElementById('auth-error').style.display = 'none';
 
