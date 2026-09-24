@@ -187,11 +187,15 @@ io.on("connection", (socket) => {
   socket.on("ban_user", async ({ target }) => {
     if (!myIsAdmin) return;
 
+    // 1. Trouver l'UID Firebase associé au pseudo ciblé
     const targetEntry = [...users.entries()].find(([, p]) => p === target);
     if (!targetEntry) return;
     const [targetUid] = targetEntry;
-    if (ADMIN_UIDS.includes(targetUid)) return; // protection des admins
 
+    // Protection : impossible de bannir un autre admin
+    if (ADMIN_UIDS.includes(targetUid)) return;
+
+    // 2. Supprimer la session mémoire locale
     users.delete(targetUid);
 
     const targetSocketId = onlineSockets.get(target);
@@ -200,12 +204,27 @@ io.on("connection", (socket) => {
       onlineSockets.delete(target);
     }
 
+    // 3. Action définitive sur Firebase Authentication
     try {
+      // Option A (Recommandée) : Désactiver le compte dans Firebase
+      // L'utilisateur ne pourra plus jamais se connecter ni se réinscrire avec ce pseudo.
+      await admin.auth().updateUser(targetUid, { disabled: true });
+      
+      // Révoquer immédiatement sa session courante
       await admin.auth().revokeRefreshTokens(targetUid);
+
+      /* 
+      // Option B : Supprimer totalement le compte Firebase
+      // (Décommente la ligne ci-dessous si tu préfères la suppression pure et simple)
+      // await admin.auth().deleteUser(targetUid);
+      */
+
+      console.log(`[BAN] L'utilisateur ${target} (UID: ${targetUid}) a été banni définitivement.`);
     } catch (err) {
-      // pas bloquant si ça échoue
+      console.error(`[BAN ERROR] Échec de la suspension Firebase pour ${target}:`, err.message);
     }
 
+    // 4. Mettre à jour la liste des utilisateurs en ligne pour tout le monde
     io.emit("update_users", getOnlineList());
   });
 
