@@ -24,7 +24,7 @@ const PORT = process.env.PORT || 3000;
 // Pour plusieurs admins : sépare les UID par des virgules,
 // ex. ADMIN_UID="uid1,uid2"
 // ============================================================
-const ADMIN_UIDS = (process.env.ADMIN_UID || "COLLE_ICI_L_UID_FIREBASE")
+const ADMIN_UIDS = (process.env.ADMIN_UID || "SUDPTlRjaSfNbE3Pt7WiosWla3D3")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
