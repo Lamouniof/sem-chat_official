@@ -68,9 +68,36 @@ function privateKey(a, b) {
   return [a, b].sort().join("|");
 }
 
-function getOnlineList() {
-  return Array.from(onlineSockets.keys());
+// Fonction pour récupérer les membres en ligne et hors ligne depuis Firebase Auth
+async function sendUserLists() {
+  try {
+    // 1. Récupérer tous les comptes Firebase Auth (limite à 1000 utilisateurs)
+    const listUsersResult = await admin.auth().listUsers(1000);
+    
+    // Extraire les pseudos (displayName) de tous les comptes Firebase
+    const allFirebaseUsers = listUsersResult.users
+      .map(userRecord => userRecord.displayName)
+      .filter(Boolean); // Filtre les pseudos non nuls
+
+    // 2. Récupérer les membres actuellement en ligne
+    const onlineList = Array.from(users.values());
+
+    // 3. Calculer les membres hors ligne
+    const offlineList = allFirebaseUsers.filter(pseudo => !onlineList.includes(pseudo));
+
+    // 4. Envoyer les deux listes et le compteur à tout le monde
+    io.emit("update_users", {
+      onlineCount: onlineList.length,
+      onlineUsers: onlineList,
+      offlineUsers: offlineList
+    });
+  } catch (error) {
+    console.error("Erreur lors de la récupération des utilisateurs Firebase:", error);
+  }
 }
+
+// Remplace les anciens io.emit("update_users", getOnlineList()) par :
+// sendUserLists();
 
 function getTopScores() {
   return Array.from(leaderboard.entries())
