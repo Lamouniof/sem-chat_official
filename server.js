@@ -70,31 +70,34 @@ function privateKey(a, b) {
 
 // Fonction pour récupérer les membres en ligne et hors ligne depuis Firebase Auth
 async function sendUserLists() {
+  // La liste "en ligne" ne dépend que des sockets connectés : on l'envoie
+  // toujours, même si l'appel Firebase ci-dessous échoue.
+  const onlineList = Array.from(onlineSockets.keys());
+  let offlineList = [];
+
   try {
-    // 1. Récupérer tous les comptes Firebase Auth (limite à 1000 utilisateurs)
+    // Récupérer tous les comptes Firebase Auth (limite à 1000 utilisateurs)
     const listUsersResult = await admin.auth().listUsers(1000);
-    
+
     // Extraire les pseudos (displayName) de tous les comptes Firebase
     const allFirebaseUsers = listUsersResult.users
       .map(userRecord => userRecord.displayName)
       .filter(Boolean); // Filtre les pseudos non nuls
 
-    // 2. Récupérer les membres actuellement en ligne (sockets réellement connectés,
-    // pas juste "vus une fois" — `users` n'est jamais nettoyé, `onlineSockets` si)
-    const onlineList = Array.from(onlineSockets.keys());
-
-    // 3. Calculer les membres hors ligne
-    const offlineList = allFirebaseUsers.filter(pseudo => !onlineList.includes(pseudo));
-
-    // 4. Envoyer les deux listes et le compteur à tout le monde
-    io.emit("update_users", {
-      onlineCount: onlineList.length,
-      onlineUsers: onlineList,
-      offlineUsers: offlineList
-    });
+    // Membres hors ligne = comptes Firebase qui ne sont pas dans la liste des connectés
+    offlineList = allFirebaseUsers.filter(pseudo => !onlineList.includes(pseudo));
   } catch (error) {
-    console.error("Erreur lors de la récupération des utilisateurs Firebase:", error);
+    // On log l'erreur mais on continue : au moins la liste "en ligne" doit s'afficher
+    console.error("Erreur lors de la récupération des utilisateurs Firebase (liste hors-ligne indisponible) :", error);
   }
+
+  console.log(`[update_users] ${onlineList.length} en ligne, ${offlineList.length} hors ligne`);
+
+  io.emit("update_users", {
+    onlineCount: onlineList.length,
+    onlineUsers: onlineList,
+    offlineUsers: offlineList
+  });
 }
 
 function getTopScores() {
