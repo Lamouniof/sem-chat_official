@@ -112,23 +112,252 @@
         #admin-panel { background: #262624; border-top: 2px solid #ff4d4d; }
         #admin-panel .admin-panel-title { color: #ff4d4d; font-weight: bold; margin-bottom: 8px; font-size: 0.85rem; }
 
-        /* Snake game */
+        /* Snake game - Design moderne */
         #snake-overlay {
             display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(20, 20, 19, 0.96); z-index: 1000; flex-direction: row;
-            align-items: center; justify-content: center; backdrop-filter: blur(8px); gap: 20px; padding: 20px;
+            background: linear-gradient(135deg, rgba(29, 29, 27, 0.98) 0%, rgba(52, 52, 50, 0.96) 100%);
+            z-index: 1000; flex-direction: row;
+            align-items: center; justify-content: center; backdrop-filter: blur(12px); gap: 32px; padding: 20px;
         }
-        .game-wrapper { display: flex; align-items: flex-start; gap: 20px; max-height: 90%; }
-        .game-container { background: #1D1D1B; padding: 15px; border-radius: 20px; border: 3px solid #DE6106; box-shadow: 0 0 50px rgba(222, 97, 6, 0.3); text-align: center; }
-        #snake-canvas { background: #141413; border: 2px solid #3a3a36; border-radius: 10px; display: block; width: 320px; height: 320px; }
-        .game-ui { color: white; margin-bottom: 10px; }
-        .game-header { font-size: 1.2rem; font-weight: bold; color: #DE6106; text-shadow: 0 0 10px rgba(222, 97, 6, 0.5); margin-bottom: 2px; }
-        .score-box { font-family: 'Courier New', monospace; font-size: 1rem; background: #141413; padding: 3px 12px; border-radius: 8px; display: inline-block; border: 1px solid #DE6106; }
-        .leaderboard-container { background: #1D1D1B; padding: 15px; border-radius: 20px; border: 2px solid #F28B3C; width: 220px; color: white; box-shadow: 0 0 30px rgba(242, 139, 60, 0.2); align-self: stretch; display: flex; flex-direction: column; }
-        .leaderboard-title { color: #F28B3C; font-weight: bold; text-align: center; margin-bottom: 10px; border-bottom: 1px solid #F28B3C; padding-bottom: 5px; font-size: 0.9rem;}
-        #leaderboard-list { list-style: none; padding: 0; margin: 0; font-size: 0.8rem; overflow-y: auto; }
-        .leader-item { display: flex; justify-content: space-between; padding: 4px 8px; margin-bottom: 4px; border-radius: 5px; background: rgba(255,255,255,0.05); }
-        .leader-item:nth-child(1) { background: rgba(255, 215, 0, 0.2); border: 1px solid gold; }
+        .game-wrapper { display: flex; align-items: flex-start; gap: 32px; max-height: 90%; }
+        
+        .game-container {
+            background: linear-gradient(180deg, #262624 0%, #1D1D1B 100%);
+            padding: 24px;
+            border-radius: 24px;
+            border: 2px solid #DE6106;
+            box-shadow: 0 0 60px rgba(222, 97, 6, 0.4), inset 0 1px 0 rgba(255,255,255,0.05);
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        .game-container::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: radial-gradient(circle at top right, rgba(222, 97, 6, 0.1) 0%, transparent 70%);
+            pointer-events: none;
+        }
+        
+        .game-ui {
+            color: white;
+            margin-bottom: 18px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .game-header {
+            font-size: 1.4rem;
+            font-weight: 900;
+            letter-spacing: 2px;
+            background: linear-gradient(135deg, #DE6106 0%, #F28B3C 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: 0 0 20px rgba(222, 97, 6, 0.3);
+            margin-bottom: 12px;
+            text-transform: uppercase;
+        }
+        
+        .score-display {
+            display: flex;
+            justify-content: space-around;
+            gap: 16px;
+            margin-bottom: 4px;
+            flex-wrap: wrap;
+        }
+        
+        .score-box {
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            background: linear-gradient(145deg, #141413, #1D1D1B);
+            padding: 8px 16px;
+            border-radius: 12px;
+            border: 1.5px solid #DE6106;
+            color: #DE6106;
+            font-weight: bold;
+            letter-spacing: 1px;
+            box-shadow: 0 4px 15px rgba(222, 97, 6, 0.2), inset 0 1px 2px rgba(255,255,255,0.05);
+            transition: all 0.3s ease;
+            flex: 1;
+            min-width: 120px;
+        }
+        .score-box:hover {
+            border-color: #F28B3C;
+            box-shadow: 0 6px 20px rgba(222, 97, 6, 0.35), inset 0 1px 2px rgba(255,255,255,0.1);
+            transform: translateY(-2px);
+        }
+        
+        #snake-canvas {
+            background: linear-gradient(135deg, #0a0a09 0%, #141413 100%);
+            border: 2px solid rgba(222, 97, 6, 0.4);
+            border-radius: 16px;
+            display: block;
+            width: 100%;
+            max-width: 380px;
+            height: auto;
+            aspect-ratio: 1 / 1;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.8), inset 0 1px 1px rgba(222, 97, 6, 0.1);
+            margin: 0 auto;
+        }
+        
+        .game-buttons {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            margin-top: 18px;
+            flex-wrap: wrap;
+        }
+        
+        .game-buttons .btn {
+            flex: 1;
+            min-width: 140px;
+            border-radius: 12px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: none;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn-play {
+            background: linear-gradient(135deg, #DE6106 0%, #F28B3C 100%);
+            color: white;
+            box-shadow: 0 6px 20px rgba(222, 97, 6, 0.3);
+        }
+        .btn-play:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(222, 97, 6, 0.5);
+        }
+        .btn-play:active {
+            transform: translateY(0px);
+        }
+        
+        .btn-close {
+            background: rgba(255, 255, 255, 0.08);
+            color: white;
+            border: 1.5px solid rgba(255, 255, 255, 0.2);
+        }
+        .btn-close:hover {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.35);
+            transform: translateY(-2px);
+        }
+        
+        .leaderboard-container {
+            background: linear-gradient(180deg, #262624 0%, #1D1D1B 100%);
+            padding: 24px;
+            border-radius: 24px;
+            border: 2px solid #F28B3C;
+            width: 100%;
+            max-width: 280px;
+            color: white;
+            box-shadow: 0 0 50px rgba(242, 139, 60, 0.25), inset 0 1px 0 rgba(255,255,255,0.05);
+            align-self: stretch;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+        }
+        .leaderboard-container::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: radial-gradient(circle at bottom left, rgba(242, 139, 60, 0.08) 0%, transparent 70%);
+            pointer-events: none;
+        }
+        
+        .leaderboard-title {
+            color: #F28B3C;
+            font-weight: 900;
+            text-align: center;
+            margin-bottom: 16px;
+            border-bottom: 2px solid #F28B3C;
+            padding-bottom: 10px;
+            font-size: 1rem;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+        
+        #leaderboard-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            font-size: 0.85rem;
+            overflow-y: auto;
+            max-height: 340px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .leader-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 12px;
+            margin-bottom: 6px;
+            border-radius: 10px;
+            background: rgba(242, 139, 60, 0.06);
+            border: 1px solid rgba(242, 139, 60, 0.15);
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        
+        .leader-item:hover {
+            background: rgba(242, 139, 60, 0.12);
+            border-color: rgba(242, 139, 60, 0.3);
+            transform: translateX(4px);
+        }
+        
+        .leader-rank {
+            color: #F28B3C;
+            font-weight: 900;
+            min-width: 28px;
+            text-align: center;
+        }
+        
+        .leader-name {
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin: 0 8px;
+        }
+        
+        .leader-score {
+            color: #DE6106;
+            font-weight: 900;
+            font-family: 'Courier New', monospace;
+            min-width: 60px;
+            text-align: right;
+        }
+        
+        .leader-item:nth-child(1) {
+            background: linear-gradient(135deg, rgba(242, 139, 60, 0.25) 0%, rgba(222, 97, 6, 0.15) 100%);
+            border: 1.5px solid #F28B3C;
+            box-shadow: 0 0 15px rgba(242, 139, 60, 0.2);
+        }
+        .leader-item:nth-child(1) .leader-rank { font-size: 1.2rem; }
+        
+        .leader-item:nth-child(2) {
+            background: rgba(200, 200, 200, 0.08);
+            border: 1px solid rgba(200, 200, 200, 0.15);
+        }
+        .leader-item:nth-child(2) .leader-rank { color: #c8c8c8; }
+        
+        .leader-item:nth-child(3) {
+            background: rgba(205, 127, 50, 0.08);
+            border: 1px solid rgba(205, 127, 50, 0.15);
+        }
+        .leader-item:nth-child(3) .leader-rank { color: #cd7f32; }
+        
+        .empty-leaderboard {
+            text-align: center;
+            color: rgba(255, 255, 255, 0.4);
+            padding: 20px;
+            font-size: 0.85rem;
+        }
 
         /* Barre supérieure mobile (hamburger + titre), cachée sur desktop */
         .mobile-topbar {
@@ -167,6 +396,28 @@
             transition: opacity 0.25s ease;
         }
         .sidebar-backdrop.show { display: block; opacity: 1; }
+
+        /* Bouton Info & Modal Conditions */
+        #info-btn:hover {
+            background: #F28B3C;
+            transform: scale(1.1);
+            box-shadow: 0 6px 20px rgba(222, 97, 6, 0.5);
+        }
+        #info-btn:active {
+            transform: scale(0.95);
+        }
+        #terms-modal {
+            display: none !important;
+        }
+        #terms-modal.show {
+            display: flex !important;
+        }
+        #terms-modal h3 {
+            margin: 16px 0 8px 0 !important;
+        }
+        #terms-modal p {
+            margin: 8px 0 !important;
+        }
 
         /* ===================== IDENTITÉ SEM CHAT (noir #1D1D1B + orange #DE6106) ===================== */
         :root { --dark: #141413; --charcoal: #1D1D1B; --orange: #DE6106; --orange-hover: #C25505; --orange-active: #A84A04; --bs-primary: #DE6106; --bs-primary-rgb: 222,97,6; }
@@ -244,11 +495,13 @@
             #msg { font-size: 16px; }
 
             /* Jeu Snake : on empile verticalement au lieu de côte à côte */
-            #snake-overlay { padding: 10px; padding-top: calc(10px + var(--safe-top)); padding-bottom: calc(10px + var(--safe-bottom)); }
-            .game-wrapper { flex-direction: column; align-items: stretch; max-height: 100%; overflow-y: auto; gap: 14px; }
-            .game-container { padding: 12px; }
-            #snake-canvas { width: 100%; height: auto; max-width: 320px; aspect-ratio: 1 / 1; margin: 0 auto; display: block; }
-            .leaderboard-container { width: 100%; max-width: 320px; margin: 0 auto; align-self: center; max-height: 160px; }
+            #snake-overlay { padding: 16px; padding-top: calc(16px + var(--safe-top)); padding-bottom: calc(16px + var(--safe-bottom)); gap: 20px; }
+            .game-wrapper { flex-direction: column; align-items: stretch; width: 100%; max-height: 100%; overflow-y: auto; gap: 18px; }
+            .game-container { padding: 18px; }
+            #snake-canvas { width: 100%; height: auto; max-width: 100%; aspect-ratio: 1 / 1; margin: 0 auto; display: block; }
+            .leaderboard-container { width: 100%; max-height: 180px; }
+            .game-buttons { margin-top: 16px; }
+            .game-buttons .btn { min-width: 130px; }
         }
 
         @media (max-width: 380px) {
@@ -258,6 +511,41 @@
     </style>
 </head>
 <body>
+
+    <!-- Modal Conditions d'Utilisation -->
+    <div id="terms-modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 2000; display: none; align-items: center; justify-content: center;">
+        <div style="background: white; border-radius: 20px; padding: 32px; max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 2px solid #DE6106; padding-bottom: 16px;">
+                <h2 style="margin: 0; color: #1D1D1B; font-size: 1.5rem;">Conditions d'Utilisation</h2>
+                <button onclick="closeTermsModal()" style="background: none; border: none; font-size: 1.8rem; cursor: pointer; color: #1D1D1B;">✕</button>
+            </div>
+            <div style="color: #333; line-height: 1.6; font-size: 0.95rem;">
+                <h3 style="color: #DE6106; margin-top: 16px;">1. Conditions Générales</h3>
+                <p>Sem-chat est une application de messagerie en temps réel. En utilisant ce service, vous acceptez ces conditions d'utilisation.</p>
+                
+                <h3 style="color: #DE6106; margin-top: 16px;">2. Compte Utilisateur</h3>
+                <p>Vous êtes responsable de la confidentialité de votre mot de passe. Vous acceptez de ne pas partager vos identifiants avec d'autres personnes.</p>
+                
+                <h3 style="color: #DE6106; margin-top: 16px;">3. Contenu</h3>
+                <p>Vous acceptez de ne pas publier de contenu illégal, offensant ou contraire à l'éthique. Les administrateurs se réservent le droit de supprimer des messages ou bannir des comptes.</p>
+                
+                <h3 style="color: #DE6106; margin-top: 16px;">4. Données & Vie Privée</h3>
+                <p>Vos messages et données personnelles sont stockés pour le fonctionnement du service. L'application utilise Firebase pour l'authentification.</p>
+                
+                <h3 style="color: #DE6106; margin-top: 16px;">5. Responsabilité</h3>
+                <p>Sem-chat est fournie "telle quelle". Les administrateurs ne sont pas responsables des pertes de données ou des interruptions de service.</p>
+                
+                <h3 style="color: #DE6106; margin-top: 16px;">6. Modifications</h3>
+                <p>Ces conditions peuvent être modifiées à tout moment sans notification préalable.</p>
+            </div>
+            <div style="margin-top: 24px; text-align: center;">
+                <button onclick="closeTermsModal()" class="btn" style="background-color: #DE6106; border: none; color: white; padding: 10px 32px; border-radius: 12px; cursor: pointer; font-weight: 600;">J'accepte</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bouton Info dans le coin -->
+    <button id="info-btn" onclick="showTermsModal()" style="position: fixed; top: 20px; right: 20px; width: 40px; height: 40px; border-radius: 50%; background: #DE6106; color: white; border: none; font-size: 1.2rem; cursor: pointer; font-weight: bold; box-shadow: 0 4px 12px rgba(222, 97, 6, 0.3); z-index: 999; transition: all 0.3s ease; display: flex; align-items: center; justify-content: center;">ⓘ</button>
 
     <div id="auth-box">
         <div class="text-center mb-4"><img src="/logo/sem-chat-logo.svg" alt="Sem chat" style="width: 150px; max-width: 60%; height: auto;"></div>
@@ -282,18 +570,20 @@
             <div class="game-wrapper">
                 <div class="game-container">
                     <div class="game-ui">
-                        <div class="game-header">SNAKE MINI</div>
-                        <div class="score-box">SCORE: <span id="score">0</span></div>
+                        <div class="game-header">🐍 SNAKE</div>
+                        <div class="score-display">
+                            <div class="score-box">SCORE<br><span id="score">0</span></div>
+                        </div>
                     </div>
-                    <canvas id="snake-canvas" width="320" height="320"></canvas>
-                    <div class="mt-2 d-flex gap-2 justify-content-center">
-                        <button class="btn btn-sm btn-primary" id="btn-restart" style="display:none;" onclick="startSnake()">Rejouer</button>
-                        <button class="btn btn-sm btn-outline-danger" onclick="toggleSnake()">Quitter</button>
+                    <canvas id="snake-canvas" width="360" height="360"></canvas>
+                    <div class="game-buttons">
+                        <button class="btn btn-play" id="btn-restart" style="display:none;" onclick="startSnake()">🔄 Rejouer</button>
+                        <button class="btn btn-close" onclick="toggleSnake()">✕ Fermer</button>
                     </div>
                 </div>
 
                 <div class="leaderboard-container">
-                    <div class="leaderboard-title">🏆 TOP 10</div>
+                    <div class="leaderboard-title">🏆 Top 10</div>
                     <ul id="leaderboard-list"></ul>
                 </div>
             </div>
@@ -400,6 +690,18 @@
             return `${base}-${suffix}@sem-chat.local`;
         }
 
+        // --- MODAL CONDITIONS D'UTILISATION ---
+        window.showTermsModal = function() {
+            document.getElementById('terms-modal').classList.add('show');
+        };
+        window.closeTermsModal = function() {
+            document.getElementById('terms-modal').classList.remove('show');
+        };
+        // Fermer la modal en cliquant sur le backdrop
+        document.getElementById('terms-modal')?.addEventListener('click', function(e) {
+            if(e.target === this) closeTermsModal();
+        });
+
         // --- GESTION DE L'AUTHENTIFICATION & ANIMATIONS ---
         window.switchAuthTab = function(mode) {
             if (authMode === mode) return;
@@ -464,7 +766,16 @@
         }
 
         window.logout = function() {
-            signOut(auth).then(() => location.reload());
+            signOut(auth).then(() => {
+                // Afficher le bouton info et masquer le chat
+                document.getElementById('info-btn').style.display = 'flex';
+                document.getElementById('chat-area').style.display = 'none';
+                document.getElementById('auth-box').style.display = 'flex';
+                // Reset formes auth
+                document.getElementById('pseudo').value = '';
+                document.getElementById('mdp').value = '';
+                document.getElementById('auth-error').style.display = 'none';
+            });
         };
 
         // --- LOGIQUE SOCKET.IO ET CHAT ---
@@ -508,6 +819,7 @@
                 myPseudo = data.pseudo; isAdmin = data.is_admin;
                 document.getElementById('auth-box').style.display = 'none';
                 document.getElementById('chat-area').style.display = 'flex';
+                document.getElementById('info-btn').style.display = 'none';
                 document.getElementById('my-name').innerHTML = `Connecté : <b>${myPseudo} ${isAdmin ? '<span class="badge bg-danger">ADMIN</span>' : ''}</b>`;
 
                 if (isAdmin) {
@@ -733,7 +1045,17 @@
 
         socket.on('update_leaderboard', (scores) => {
             const list = document.getElementById('leaderboard-list');
-            list.innerHTML = scores.map((s, i) => `<li class="leader-item"><span>${i+1}. ${s.pseudo}</span><b>${s.score}</b></li>`).join('');
+            if(scores.length === 0) {
+                list.innerHTML = '<div class="empty-leaderboard">Aucun score\npour l\'instant...</div>';
+            } else {
+                list.innerHTML = scores.map((s, i) => `
+                    <li class="leader-item">
+                        <span class="leader-rank">${i+1}</span>
+                        <span class="leader-name">${s.pseudo}</span>
+                        <span class="leader-score">${s.score}</span>
+                    </li>
+                `).join('');
+            }
         });
 
         function handleKeydown(e) {
@@ -751,11 +1073,12 @@
 
         window.startSnake = function() {
             const canvas = document.getElementById("snake-canvas");
-            const ctx = canvas.getContext("2d");
-            const box = 16;
+            const ctx = canvas.getContext("2d", { antialias: true });
+            const box = 18;
             let score = 0;
             let snake = [{x: 10 * box, y: 10 * box}, {x: 9 * box, y: 10 * box}];
-            let food = {x: Math.floor(Math.random() * (canvas.width/box)) * box, y: Math.floor(Math.random() * (canvas.height/box)) * box};
+            let food = {x: Math.floor(Math.random() * (Math.floor(canvas.width/box))) * box, y: Math.floor(Math.random() * (Math.floor(canvas.height/box))) * box};
+            let foodPulse = 0;
 
             snakeDirection = "RIGHT"; nextDirection = "RIGHT"; isPaused = false;
             document.getElementById('score').innerText = score;
@@ -763,33 +1086,145 @@
             clearInterval(snakeInterval);
             document.addEventListener("keydown", handleKeydown);
 
+            function drawRoundRect(x, y, w, h, r, fill = true) {
+                ctx.beginPath();
+                ctx.moveTo(x + r, y);
+                ctx.lineTo(x + w - r, y);
+                ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+                ctx.lineTo(x + w, y + h - r);
+                ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+                ctx.lineTo(x + r, y + h);
+                ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+                ctx.lineTo(x, y + r);
+                ctx.quadraticCurveTo(x, y, x + r, y);
+                ctx.closePath();
+                if(fill) ctx.fill();
+                else ctx.stroke();
+            }
+
             function draw() {
                 if(isPaused) return;
-                ctx.fillStyle = "#141413"; ctx.fillRect(0, 0, canvas.width, canvas.height);
-                ctx.fillStyle = "#F2F0EB"; ctx.fillRect(food.x+2, food.y+2, box-4, box-4);
+                
+                // Fond avec gradient
+                const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+                gradient.addColorStop(0, "#0a0a09");
+                gradient.addColorStop(1, "#141413");
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // Grille subtile de fond
+                ctx.strokeStyle = "rgba(222, 97, 6, 0.05)";
+                ctx.lineWidth = 1;
+                for(let i = 0; i < canvas.width; i += box) {
+                    ctx.beginPath();
+                    ctx.moveTo(i, 0);
+                    ctx.lineTo(i, canvas.height);
+                    ctx.stroke();
+                }
+                for(let i = 0; i < canvas.height; i += box) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, i);
+                    ctx.lineTo(canvas.width, i);
+                    ctx.stroke();
+                }
+                
+                // Nourriture animée avec pulse
+                foodPulse = (foodPulse + 0.1) % (Math.PI * 2);
+                const foodSize = box - 6 + Math.sin(foodPulse) * 2;
+                const foodGrad = ctx.createRadialGradient(food.x + box/2, food.y + box/2, 0, food.x + box/2, food.y + box/2, foodSize/2);
+                foodGrad.addColorStop(0, "#FFD700");
+                foodGrad.addColorStop(1, "#F28B3C");
+                ctx.fillStyle = foodGrad;
+                ctx.beginPath();
+                ctx.arc(food.x + box/2, food.y + box/2, foodSize/2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = "rgba(255, 215, 0, 0.5)";
+                ctx.lineWidth = 2;
+                ctx.stroke();
 
                 snakeDirection = nextDirection;
+                
+                // Dessiner le serpent avec gradient
                 for(let i = 0; i < snake.length; i++) {
-                    ctx.fillStyle = (i == 0) ? "#DE6106" : "#B84F04";
-                    ctx.fillRect(snake[i].x, snake[i].y, box, box);
+                    const seg = snake[i];
+                    const isHead = i === 0;
+                    
+                    if(isHead) {
+                        // Tête avec gradient radial
+                        const headGrad = ctx.createRadialGradient(seg.x + box/2, seg.y + box/2, 0, seg.x + box/2, seg.y + box/2, box/2);
+                        headGrad.addColorStop(0, "#FF9F43");
+                        headGrad.addColorStop(1, "#DE6106");
+                        ctx.fillStyle = headGrad;
+                    } else {
+                        // Corps avec gradient linéaire
+                        const bodyGrad = ctx.createLinearGradient(seg.x, seg.y, seg.x + box, seg.y + box);
+                        bodyGrad.addColorStop(0, "#DE6106");
+                        bodyGrad.addColorStop(1, "#B84A00");
+                        ctx.fillStyle = bodyGrad;
+                    }
+                    
+                    drawRoundRect(seg.x + 1, seg.y + 1, box - 2, box - 2, 4);
+                    
+                    if(isHead) {
+                        // Glow effect pour la tête
+                        ctx.strokeStyle = "rgba(222, 97, 6, 0.6)";
+                        ctx.lineWidth = 3;
+                        ctx.stroke();
+                        
+                        // Yeux
+                        ctx.fillStyle = "white";
+                        ctx.beginPath();
+                        if(snakeDirection === "RIGHT") { ctx.arc(seg.x + box - 4, seg.y + 5, 2, 0, Math.PI * 2); }
+                        else if(snakeDirection === "LEFT") { ctx.arc(seg.x + 4, seg.y + 5, 2, 0, Math.PI * 2); }
+                        else if(snakeDirection === "UP") { ctx.arc(seg.x + 5, seg.y + 4, 2, 0, Math.PI * 2); }
+                        else if(snakeDirection === "DOWN") { ctx.arc(seg.x + 5, seg.y + box - 4, 2, 0, Math.PI * 2); }
+                        ctx.fill();
+                        ctx.fillStyle = "black";
+                        ctx.beginPath();
+                        if(snakeDirection === "RIGHT") { ctx.arc(seg.x + box - 4, seg.y + 5, 1, 0, Math.PI * 2); }
+                        else if(snakeDirection === "LEFT") { ctx.arc(seg.x + 4, seg.y + 5, 1, 0, Math.PI * 2); }
+                        else if(snakeDirection === "UP") { ctx.arc(seg.x + 5, seg.y + 4, 1, 0, Math.PI * 2); }
+                        else if(snakeDirection === "DOWN") { ctx.arc(seg.x + 5, seg.y + box - 4, 1, 0, Math.PI * 2); }
+                        ctx.fill();
+                    }
                 }
 
                 let snakeX = snake[0].x, snakeY = snake[0].y;
-                if(snakeDirection == "LEFT") snakeX -= box; else if(snakeDirection == "UP") snakeY -= box;
-                else if(snakeDirection == "RIGHT") snakeX += box; else if(snakeDirection == "DOWN") snakeY += box;
+                if(snakeDirection === "LEFT") snakeX -= box;
+                else if(snakeDirection === "UP") snakeY -= box;
+                else if(snakeDirection === "RIGHT") snakeX += box;
+                else if(snakeDirection === "DOWN") snakeY += box;
 
+                // Collision
                 if(snakeX < 0 || snakeX >= canvas.width || snakeY < 0 || snakeY >= canvas.height || snake.some((seg, idx) => idx !== 0 && seg.x === snakeX && seg.y === snakeY)) {
                     clearInterval(snakeInterval);
-                    ctx.fillStyle = "white"; ctx.font = "20px Arial"; ctx.fillText("GAME OVER", canvas.width/2 - 60, canvas.height/2);
+                    
+                    // Game over screen
+                    ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    
+                    ctx.fillStyle = "#DE6106";
+                    ctx.font = "bold 32px Arial";
+                    ctx.textAlign = "center";
+                    ctx.fillText("GAME OVER", canvas.width/2, canvas.height/2 - 20);
+                    
+                    ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+                    ctx.font = "20px Arial";
+                    ctx.fillText("Score: " + score, canvas.width/2, canvas.height/2 + 25);
+                    
                     document.getElementById('btn-restart').style.display = 'block';
                     socket.emit('save_score', {pseudo: myPseudo, score: score});
                     return;
                 }
 
-                if(snakeX == food.x && snakeY == food.y) {
-                    score++; document.getElementById('score').innerText = score;
-                    food = {x: Math.floor(Math.random() * (canvas.width/box)) * box, y: Math.floor(Math.random() * (canvas.height/box)) * box};
-                } else { snake.pop(); }
+                // Manger
+                if(snakeX === food.x && snakeY === food.y) {
+                    score++;
+                    document.getElementById('score').innerText = score;
+                    food = {x: Math.floor(Math.random() * (Math.floor(canvas.width/box))) * box, y: Math.floor(Math.random() * (Math.floor(canvas.height/box))) * box};
+                } else {
+                    snake.pop();
+                }
                 snake.unshift({x: snakeX, y: snakeY});
             }
             snakeInterval = setInterval(draw, 100);
