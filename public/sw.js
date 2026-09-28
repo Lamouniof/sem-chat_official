@@ -4,7 +4,7 @@
 // messages : seules les connexions HTTP passent par fetch() ci-dessous, les
 // connexions WebSocket de Socket.IO ne sont jamais interceptées par un service worker.
 
-const CACHE_NAME = "sem-chat-shell-v2";
+const CACHE_NAME = "sem-chat-shell-v3";
 const APP_SHELL = [
   "/",
   "/manifest.json",
@@ -12,7 +12,9 @@ const APP_SHELL = [
   "/icons/icon-512.png",
   "/icons/apple-touch-icon.png",
   "/icons/favicon.ico",
-  "/logo/sem-chat-logo.svg"
+  "/logo/sem-chat-logo.svg",
+  "/logo/sem-chat-logo-light.svg",
+  "/logo/sem-chat-mark.svg"
 ];
 
 self.addEventListener("install", (event) => {
