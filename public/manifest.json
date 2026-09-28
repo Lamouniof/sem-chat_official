@@ -1,13 +1,13 @@
 {
   "name": "Sem-chat",
   "short_name": "Sem-chat",
-  "description": "Messagerie en temps réel Sem-chat",
+  "description": "Messagerie en temps r\u00e9el Sem-chat",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0f0c29",
-  "theme_color": "#4361ee",
+  "background_color": "#1D1D1B",
+  "theme_color": "#DE6106",
   "lang": "fr",
   "icons": [
     {
