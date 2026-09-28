@@ -8,6 +8,7 @@
     <!-- PWA : rend l'app installable sur téléphone (Ajouter à l'écran d'accueil) -->
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#4361ee">
+    <link rel="icon" href="/icons/favicon.ico" sizes="any">
     <link rel="icon" href="/icons/favicon-32.png" sizes="32x32" type="image/png">
 
     <!-- iOS ne lit pas le manifest.json pour l'icône/le mode standalone : balises dédiées -->
@@ -20,6 +21,14 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
 
     <style>
+        :root {
+            --safe-top: env(safe-area-inset-top, 0px);
+            --safe-bottom: env(safe-area-inset-bottom, 0px);
+            --safe-left: env(safe-area-inset-left, 0px);
+            --safe-right: env(safe-area-inset-right, 0px);
+        }
+
+        html, body { height: 100%; }
         body { background: #0f0c29; height: 100vh; display: flex; align-items: center; justify-content: center; font-family: 'Segoe UI', sans-serif; margin: 0; color: white; overflow: hidden; }
         
         /* Auth box moderne avec animations */
@@ -120,12 +129,124 @@
         #leaderboard-list { list-style: none; padding: 0; margin: 0; font-size: 0.8rem; overflow-y: auto; }
         .leader-item { display: flex; justify-content: space-between; padding: 4px 8px; margin-bottom: 4px; border-radius: 5px; background: rgba(255,255,255,0.05); }
         .leader-item:nth-child(1) { background: rgba(255, 215, 0, 0.2); border: 1px solid gold; }
+
+        /* Barre supérieure mobile (hamburger + titre), cachée sur desktop */
+        .mobile-topbar {
+            display: none;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 14px;
+            padding-top: calc(10px + var(--safe-top));
+            background: #16213e;
+            color: white;
+            flex-shrink: 0;
+        }
+        .mobile-topbar .hamburger-btn {
+            background: rgba(255,255,255,0.12);
+            border: none;
+            color: white;
+            width: 40px;
+            height: 40px;
+            min-width: 40px;
+            border-radius: 10px;
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .mobile-topbar .mobile-topbar-title { font-weight: bold; flex-grow: 1; }
+
+        /* Fond assombri derrière le menu latéral sur mobile */
+        .sidebar-backdrop {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1040;
+            opacity: 0;
+            transition: opacity 0.25s ease;
+        }
+        .sidebar-backdrop.show { display: block; opacity: 1; }
+
+        /* ===================== MOBILE ===================== */
+        @media (max-width: 768px) {
+            body { overflow: hidden; }
+
+            #auth-box {
+                width: 88vw;
+                max-width: 380px;
+                padding: 2rem 1.5rem;
+                padding-top: calc(2rem + var(--safe-top));
+                padding-bottom: calc(2rem + var(--safe-bottom));
+                max-height: 92vh;
+                overflow-y: auto;
+            }
+
+            /* Le chat prend tout l'écran, sans carte flottante */
+            #chat-area {
+                width: 100%;
+                height: 100vh;
+                height: 100dvh;
+                max-width: 100%;
+                border-radius: 0;
+                box-shadow: none;
+            }
+
+            .main-container { position: relative; overflow: hidden; }
+
+            /* La sidebar devient un tiroir plein écran (drawer) qui glisse depuis la gauche */
+            .sidebar {
+                position: fixed;
+                top: 0; left: 0;
+                height: 100%;
+                width: min(86vw, 320px);
+                max-width: 320px;
+                transform: translateX(-100%);
+                transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                z-index: 1050;
+                padding-top: var(--safe-top);
+                padding-bottom: var(--safe-bottom);
+                padding-left: var(--safe-left);
+            }
+            .sidebar.open {
+                transform: translateX(0);
+                box-shadow: 12px 0 40px rgba(0,0,0,0.5);
+            }
+
+            .mobile-topbar { display: flex; }
+
+            .chat-nav { padding: 8px 12px; gap: 8px; }
+            .tab { padding: 6px 12px; font-size: 0.78rem; }
+
+            #chat-window { padding: 14px; gap: 10px; }
+            .message-wrapper { max-width: 86%; }
+            .msg-bubble { font-size: 0.88rem; }
+
+            /* Zone de saisie : espace pour la barre gestuelle iOS/Android + évite le zoom iOS au focus */
+            .chat-main > .p-3.bg-white.border-top {
+                padding: 10px 12px !important;
+                padding-bottom: calc(10px + var(--safe-bottom)) !important;
+            }
+            #msg { font-size: 16px; }
+
+            /* Jeu Snake : on empile verticalement au lieu de côte à côte */
+            #snake-overlay { padding: 10px; padding-top: calc(10px + var(--safe-top)); padding-bottom: calc(10px + var(--safe-bottom)); }
+            .game-wrapper { flex-direction: column; align-items: stretch; max-height: 100%; overflow-y: auto; gap: 14px; }
+            .game-container { padding: 12px; }
+            #snake-canvas { width: 100%; height: auto; max-width: 320px; aspect-ratio: 1 / 1; margin: 0 auto; display: block; }
+            .leaderboard-container { width: 100%; max-width: 320px; margin: 0 auto; align-self: center; max-height: 160px; }
+        }
+
+        @media (max-width: 380px) {
+            .sidebar-header span:first-child { font-size: 0.85rem; }
+            #online-counter { font-size: 0.7rem; }
+        }
     </style>
 </head>
 <body>
 
     <div id="auth-box">
-        <h2 class="text-center mb-4" style="color: #4361ee; font-weight: bold; letter-spacing: -0.5px;">Sem-chat</h2>
+        <div class="text-center mb-4"><img src="/logo/sem-chat-logo.svg" alt="Sem chat" style="width: 150px; max-width: 60%; height: auto;"></div>
 
         <div class="auth-tabs">
             <div class="auth-tab-indicator" id="auth-tab-indicator"></div>
@@ -165,7 +286,8 @@
         </div>
 
         <div class="main-container">
-            <div class="sidebar">
+            <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="toggleSidebar(false)"></div>
+            <div class="sidebar" id="sidebar">
     <!-- En-tête avec le compteur de membres en ligne -->
     <div class="sidebar-header d-flex justify-content-between align-items-center">
         <span>👥 MEMBRES</span>
@@ -204,6 +326,11 @@
                 </div>
             </div>
             <div class="chat-main">
+                <div class="mobile-topbar">
+                    <button class="hamburger-btn" onclick="toggleSidebar()" aria-label="Menu">☰</button>
+                    <span class="mobile-topbar-title" id="mobile-topbar-title">Général</span>
+                    <span class="badge bg-success" id="online-counter-mobile">0</span>
+                </div>
                 <div class="chat-nav" id="chat-tabs"></div>
                 <div id="chat-window"></div>
                 <div class="p-3 bg-white border-top">
@@ -441,7 +568,25 @@
             }
         };
 
-        window.switchTab = function(t) { currentTab = t; unreadCounts[t] = 0; renderTabs(); renderMessages(); };
+        window.switchTab = function(t) {
+            currentTab = t;
+            unreadCounts[t] = 0;
+            renderTabs();
+            renderMessages();
+            const titleEl = document.getElementById('mobile-topbar-title');
+            if (titleEl) titleEl.textContent = t;
+            // Sur mobile, sélectionner une conversation referme le tiroir latéral
+            if (window.innerWidth <= 768) toggleSidebar(false);
+        };
+
+        // --- Menu latéral mobile (tiroir) ---
+        window.toggleSidebar = function(force) {
+            const sidebar = document.getElementById('sidebar');
+            const backdrop = document.getElementById('sidebar-backdrop');
+            const open = typeof force === 'boolean' ? force : !sidebar.classList.contains('open');
+            sidebar.classList.toggle('open', open);
+            backdrop.classList.toggle('show', open);
+        };
 
         socket.on('message', (d) => {
             conversations["Général"].push(d);
@@ -466,6 +611,8 @@
 
             const counterEl = document.getElementById('online-counter');
             if (counterEl) counterEl.textContent = `${onlineCount} en ligne`;
+            const counterElMobile = document.getElementById('online-counter-mobile');
+            if (counterElMobile) counterElMobile.textContent = onlineCount;
 
             const elOnline = document.getElementById('user-list-online');
             const elOffline = document.getElementById('user-list-offline');
