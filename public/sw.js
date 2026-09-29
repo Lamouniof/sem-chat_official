@@ -4,7 +4,7 @@
 // messages : seules les connexions HTTP passent par fetch() ci-dessous, les
 // connexions WebSocket de Socket.IO ne sont jamais interceptées par un service worker.
 
-const CACHE_NAME = "sem-chat-shell-v4";
+const CACHE_NAME = "sem-chat-shell-v5";
 const APP_SHELL = [
   "/",
   "/manifest.json",
