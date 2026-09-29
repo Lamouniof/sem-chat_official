@@ -40,9 +40,12 @@
             color: #333; 
             box-shadow: 0 15px 35px rgba(0,0,0,0.4); 
             transition: all 0.3s ease-in-out;
+            display: flex;
+            flex-direction: column;
+            gap: 0;
         }
 
-        .auth-tabs { display: flex; margin-bottom: 1.5rem; border-radius: 12px; overflow: hidden; border: 1px solid #E4DED4; background: #FAF7F2; position: relative; }
+        .auth-tabs { display: flex; margin-bottom: 1.5rem; border-radius: 12px; overflow: hidden; border: 1px solid #E4DED4; background: #FAF7F2; position: relative; width: 100%; }
         .auth-tab-indicator {
             position: absolute;
             top: 0; left: 0;
@@ -75,6 +78,7 @@
             display: flex;
             flex-direction: column;
             animation: fadeIn 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            width: 100%;
         }
 
         @keyframes fadeIn {
@@ -770,11 +774,16 @@
                 // Afficher le bouton info et masquer le chat
                 document.getElementById('info-btn').style.display = 'flex';
                 document.getElementById('chat-area').style.display = 'none';
-                document.getElementById('auth-box').style.display = 'flex';
+                const authBox = document.getElementById('auth-box');
+                authBox.style.display = 'flex';  // Utiliser 'flex' pour respecter le CSS normal
                 // Reset formes auth
                 document.getElementById('pseudo').value = '';
                 document.getElementById('mdp').value = '';
                 document.getElementById('auth-error').style.display = 'none';
+                // Reset onglet à "Connexion"
+                document.getElementById('tab-login').classList.add('active');
+                document.getElementById('tab-register').classList.remove('active');
+                document.getElementById('auth-tab-indicator').classList.remove('register');
             });
         };
 
