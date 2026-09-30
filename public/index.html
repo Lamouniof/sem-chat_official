@@ -1040,6 +1040,66 @@
             switchTab(tabName);
         };
 
+        // --- Filtrage dynamique des partenaires de conversation ---
+        window.filterAdminUser2 = function() {
+            const sel1 = document.getElementById('admin-user1');
+            const sel2 = document.getElementById('admin-user2');
+            const selectedUser1 = sel1.value;
+
+            if (!selectedUser1) {
+                // Si aucun utilisateur n'est sélectionné, réinitialiser le select 2
+                sel2.innerHTML = '<option value="">-- Utilisateur B --</option>';
+                return;
+            }
+
+            // Demander au serveur la liste des partenaires de conversation pour cet utilisateur
+            socket.emit('admin_get_conversation_partners', { user1: selectedUser1 });
+        };
+
+        // Attacher le listener au select admin-user1 après son affichage ou lors du login
+        function attachAdminFilterListener() {
+            const sel1 = document.getElementById('admin-user1');
+            if(sel1 && !sel1.dataset.listenerAttached) {
+                sel1.addEventListener('change', filterAdminUser2);
+                sel1.dataset.listenerAttached = 'true';
+            }
+        }
+
+        // Essayer au chargement de la page
+        document.addEventListener('DOMContentLoaded', attachAdminFilterListener);
+        
+        // Aussi lors du socket connect (au cas où)
+        socket.on('connect', attachAdminFilterListener);
+
+        // Réceptionner la liste des partenaires de conversation
+        socket.on('admin_conversation_partners', (d) => {
+            const sel2 = document.getElementById('admin-user2');
+            const currentValue = sel2.value;
+
+            // Reconstruire le select avec seulement les partenaires
+            sel2.innerHTML = '<option value="">-- Utilisateur B --</option>';
+            d.partners.forEach(partner => {
+                const opt = document.createElement('option');
+                opt.value = partner;
+                opt.text = partner;
+                sel2.appendChild(opt);
+            });
+
+            // Restaurer la valeur précédente si elle est toujours dans la liste
+            if (d.partners.includes(currentValue)) {
+                sel2.value = currentValue;
+            }
+
+            // Message si aucun partenaire
+            if (d.partners.length === 0) {
+                const opt = document.createElement('option');
+                opt.value = '';
+                opt.text = '(Aucune conversation)';
+                opt.disabled = true;
+                sel2.appendChild(opt);
+            }
+        });
+
         socket.on('load_admin_private_history', (d) => {
             const tabName = `🕵️ ${d.user1} ↔ ${d.user2}`;
             conversations[tabName] = d.history;
