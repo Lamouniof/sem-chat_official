@@ -565,7 +565,7 @@
         <div class="auth-form-container" id="auth-form">
             <input type="text" id="pseudo" class="form-control mb-3" placeholder="Pseudo" onkeydown="handleAuthKeyDown(event)">
             <input type="password" id="mdp" class="form-control mb-4" placeholder="Mot de passe" onkeydown="handleAuthKeyDown(event)">
-            <button class="btn btn-primary" style="background-color: #DE6106; border-color: #DE6106;" w-100 py-2 fw-semibold" id="auth-submit-btn" onclick="handleAuthSubmit()">Entrer</button>
+            <button class="btn btn-primary w-100 py-2 fw-semibold" style="background-color: #DE6106; border-color: #DE6106;" id="auth-submit-btn" onclick="handleAuthSubmit()">Entrer</button>
         </div>
     </div>
 
@@ -627,7 +627,7 @@
                 </div>
 
                 <div class="p-2">
-                    <button class="btn btn-primary" style="background-color: #DE6106; border-color: #DE6106;" w-100 fw-bold" onclick="toggleSnake()">🎮 ARCADE JEUX</button>
+                    <button class="btn btn-primary w-100 fw-bold" style="background-color: #DE6106; border-color: #DE6106;" onclick="toggleSnake()">🎮 ARCADE JEUX</button>
                 </div>
                 <div class="p-3 bg-dark" id="my-name">Connecté : <b></b></div>
                 <div class="p-2">
@@ -771,19 +771,53 @@
 
         window.logout = function() {
             signOut(auth).then(() => {
+                // Réinitialiser les variables globales
+                myPseudo = "";
+                isAdmin = false;
+                authMode = "login";  // ✅ Ajouté
+                currentTab = "Général";
+                conversations = { "Général": [] };
+                unreadCounts = {};
+                
+                // Masquer le panel admin
+                document.getElementById('admin-panel').style.display = 'none';
+                
                 // Afficher le bouton info et masquer le chat
                 document.getElementById('info-btn').style.display = 'flex';
                 document.getElementById('chat-area').style.display = 'none';
                 const authBox = document.getElementById('auth-box');
-                authBox.style.display = 'flex';  // Utiliser 'flex' pour respecter le CSS normal
+                authBox.style.display = 'flex';
+                
+                // Réinitialiser l'affichage du chat
+                document.getElementById('chat-tabs').innerHTML = '';
+                document.getElementById('chat-window').innerHTML = '';
+                
                 // Reset formes auth
                 document.getElementById('pseudo').value = '';
                 document.getElementById('mdp').value = '';
                 document.getElementById('auth-error').style.display = 'none';
+                
                 // Reset onglet à "Connexion"
                 document.getElementById('tab-login').classList.add('active');
                 document.getElementById('tab-register').classList.remove('active');
                 document.getElementById('auth-tab-indicator').classList.remove('register');
+                
+                // Reset titre authentification
+                document.getElementById('my-name').innerHTML = 'Connecté : <b></b>';
+                
+                // Réinitialiser la sidebar complètement
+                document.getElementById('user-list-online').innerHTML = '';
+                document.getElementById('user-list-offline').innerHTML = '';
+                document.getElementById('online-counter').textContent = '0 en ligne';
+                if(document.getElementById('online-counter-mobile')) {
+                    document.getElementById('online-counter-mobile').textContent = '0';
+                }
+                
+                // Réinitialiser les sélects d'admin
+                const adminUser1 = document.getElementById('admin-user1');
+                const adminUser2 = document.getElementById('admin-user2');
+                if(adminUser1) adminUser1.value = '';
+                if(adminUser2) adminUser2.value = '';
             });
         };
 
@@ -833,6 +867,8 @@
 
                 if (isAdmin) {
                     document.getElementById('admin-panel').style.display = 'block';
+                } else {
+                    document.getElementById('admin-panel').style.display = 'none';
                 }
 
                 renderTabs();
