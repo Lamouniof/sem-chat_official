@@ -13,16 +13,7 @@ const io = new Server(server, {
 const PORT = process.env.PORT || 3000;
 
 // ============================================================
-// ADMIN : UID Firebase du compte admin (PAS un pseudo, PAS un
-// email — il n'y en a plus de vrai côté client).
-//
-// Pour le trouver : connecte-toi une première fois avec le compte
-// à rendre admin, puis Firebase Console > Authentication > Users,
-// colonne "User UID". Colle la valeur dans la variable
-// d'environnement ADMIN_UID sur Render.
-//
-// Pour plusieurs admins : sépare les UID par des virgules,
-// ex. ADMIN_UID="uid1,uid2"
+// ADMIN : UID Firebase du compte admin
 // ============================================================
 const ADMIN_UIDS = (process.env.ADMIN_UID || "SUDPTlRjaSfNbE3Pt7WiosWla3D3")
   .split(",")
@@ -31,14 +22,6 @@ const ADMIN_UIDS = (process.env.ADMIN_UID || "SUDPTlRjaSfNbE3Pt7WiosWla3D3")
 
 // ============================================================
 // INITIALISATION FIREBASE ADMIN
-// Sur Render (production) : colle le JSON COMPLET de la clé de
-// service dans la variable d'environnement FIREBASE_SERVICE_ACCOUNT.
-// Ne commite JAMAIS ce fichier JSON sur GitHub — utilise UNIQUEMENT
-// cette variable d'environnement.
-//
-// En local pour développer (jamais en prod, jamais commité) :
-// FIREBASE_CREDENTIALS_PATH peut pointer vers un fichier local,
-// à condition qu'il soit dans .gitignore.
 // ============================================================
 let credential;
 if (process.env.FIREBASE_SERVICE_ACCOUNT) {
@@ -54,9 +37,14 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
 
 admin.initializeApp({ credential });
 
+// ============================================================
+// FIREBASE REALTIME DATABASE : accès à la base de données
+// ============================================================
+const db = admin.database();
+
 app.use(express.static(path.join(__dirname, "public")));
 
-// ---------- "Base de données" en mémoire (remise à zéro à chaque redémarrage) ----------
+// ---------- "Base de données" en mémoire + Firebase Realtime Database ----------
 const users = new Map();          // uid -> pseudo
 const onlineSockets = new Map();  // pseudo -> socket.id
 const lastActivity = new Map();   // pseudo -> timestamp (ms) de la dernière activité réelle
@@ -68,63 +56,153 @@ let nextMsgId = 1;
 const INACTIVITY_MS = 5 * 60 * 1000; // 5 minutes sans activité réelle => affiché "hors ligne"
 const FIREBASE_CACHE_TTL_MS = 2 * 60 * 1000; // on ne re-interroge Firebase Auth qu'au max toutes les 2 min
 
-// Cache des pseudos Firebase (évite de spammer admin.auth().listUsers() à chaque
-// rafraîchissement toutes les 30s, ce qui pouvait déclencher des erreurs/quota et
-// vider la liste "hors ligne" en silence).
 let firebaseUsersCache = [];
 let firebaseCacheAt = 0;
-let firebaseLastError = null; // { code, message, at } — dernière erreur Firebase rencontrée, pour debug admin
+let firebaseLastError = null;
 
 function privateKey(a, b) {
   return [a, b].sort().join("|");
 }
 
-// Va chercher tous les pseudos (displayName) de tous les comptes Firebase Auth et
-// met à jour le cache. En cas d'erreur, on GARDE l'ancien cache plutôt que de le vider,
-// pour ne pas faire disparaître la liste "hors ligne" à cause d'une erreur passagère.
+// ============================================================
+// FIREBASE : Charger les messages au démarrage
+// ============================================================
+async function loadMessagesFromFirebase() {
+  try {
+    console.log("[Firebase] Chargement des messages au démarrage...");
+
+    // 1. Charger messages généraux
+    const generalRef = db.ref("messages/general");
+    const generalSnapshot = await generalRef.once("value");
+    if (generalSnapshot.exists()) {
+      const msgs = generalSnapshot.val();
+      // Convertir l'objet Firebase en tableau, trié par ID
+      const msgArray = Object.entries(msgs)
+        .map(([key, msg]) => ({ ...msg, id: msg.id || parseInt(key.replace(/msg_/, "")) }))
+        .sort((a, b) => a.id - b.id);
+      generalHistory.push(...msgArray);
+      const maxId = Math.max(...msgArray.map(m => m.id), 0);
+      nextMsgId = maxId + 1;
+      console.log(`✅ ${msgArray.length} messages généraux chargés depuis Firebase.`);
+    }
+
+    // 2. Charger messages privés
+    const privateRef = db.ref("messages/private");
+    const privateSnapshot = await privateRef.once("value");
+    if (privateSnapshot.exists()) {
+      const conversations = privateSnapshot.val();
+      for (const [conversationKey, msgs] of Object.entries(conversations)) {
+        const msgArray = Object.entries(msgs)
+          .map(([key, msg]) => ({ ...msg, id: msg.id || parseInt(key.replace(/msg_/, "")) }))
+          .sort((a, b) => a.id - b.id);
+        privateHistory.set(conversationKey, msgArray);
+      }
+      console.log(`✅ ${privateHistory.size} conversation(s) privée(s) chargée(s) depuis Firebase.`);
+    }
+
+    // 3. Charger leaderboard
+    const leaderboardRef = db.ref("leaderboard");
+    const leaderboardSnapshot = await leaderboardRef.once("value");
+    if (leaderboardSnapshot.exists()) {
+      const leaderboardData = leaderboardSnapshot.val();
+      for (const [pseudo, score] of Object.entries(leaderboardData)) {
+        leaderboard.set(pseudo, score);
+      }
+      console.log(`✅ Leaderboard chargé : ${leaderboard.size} joueur(s).`);
+    }
+
+    console.log(`[Firebase] ✅ Démarrage avec nextMsgId = ${nextMsgId}`);
+  } catch (error) {
+    console.error("[Firebase] ❌ Erreur lors du chargement :", error.message || error);
+  }
+}
+
+// ============================================================
+// FIREBASE : Sauvegarder un message en arrière-plan
+// ============================================================
+function saveMessageToFirebase(msg) {
+  // En arrière-plan, ne pas bloquer la réponse
+  (async () => {
+    try {
+      const msgKey = `msg_${msg.id}`;
+
+      if (!msg.target || msg.target === "Général") {
+        // Message général
+        await db.ref(`messages/general/${msgKey}`).set({
+          id: msg.id,
+          user: msg.user,
+          text: msg.text,
+          type: msg.type || "text",
+          fileName: msg.fileName || null,
+          timestamp: Date.now()
+        });
+      } else {
+        // Message privé
+        const key = privateKey(msg.user, msg.target);
+        await db.ref(`messages/private/${key}/${msgKey}`).set({
+          id: msg.id,
+          user: msg.user,
+          text: msg.text,
+          type: msg.type || "text",
+          fileName: msg.fileName || null,
+          target: msg.target,
+          timestamp: Date.now()
+        });
+      }
+    } catch (error) {
+      console.error("[Firebase] ❌ Erreur sauvegarde message :", error.message || error);
+    }
+  })();
+}
+
+// ============================================================
+// FIREBASE : Sauvegarder le leaderboard en arrière-plan
+// ============================================================
+function saveLeaderboardToFirebase() {
+  (async () => {
+    try {
+      const leaderboardObj = Object.fromEntries(leaderboard);
+      await db.ref("leaderboard").set(leaderboardObj);
+    } catch (error) {
+      console.error("[Firebase] ❌ Erreur sauvegarde leaderboard :", error.message || error);
+    }
+  })();
+}
+
+// ============================================================
+// FIREBASE : Rafraîchir le cache des utilisateurs Firebase Auth
+// ============================================================
 async function refreshFirebaseUsersCache() {
   try {
-    // Récupérer TOUS les comptes Firebase Auth (limite à 1000 utilisateurs) : c'est cette
-    // liste complète qui permet d'afficher tous les pseudos existants comme "hors ligne"
-    // dès le démarrage du serveur, avant même qu'aucun d'eux ne se connecte.
     const listUsersResult = await admin.auth().listUsers(1000);
     const total = listUsersResult.users.length;
     firebaseUsersCache = listUsersResult.users
       .map(userRecord => userRecord.displayName)
-      .filter(Boolean); // Filtre les pseudos non nuls
+      .filter(Boolean);
     firebaseCacheAt = Date.now();
     firebaseLastError = null;
 
     if (total > 0 && firebaseUsersCache.length === 0) {
-      // Cas particulier utile à savoir : des comptes existent mais AUCUN n'a de
-      // displayName renseigné (donc rien ne peut s'afficher côté "hors ligne").
-      console.warn(`[Firebase] ${total} compte(s) Firebase trouvé(s), mais aucun n'a de displayName défini.`);
+      console.warn(`[Firebase] ${total} compte(s) trouvé(s), mais aucun displayName défini.`);
     }
   } catch (error) {
     firebaseLastError = { code: error.code || null, message: error.message || String(error), at: Date.now() };
-    console.error(
-      "Erreur lors de la récupération des utilisateurs Firebase (on garde le dernier cache connu) :",
-      error.code || "", error.message || error
-    );
+    console.error("[Firebase] ❌ Erreur listUsers :", error.code || "", error.message || error);
   }
 }
 
-// Diffuse à tout le monde l'état en ligne / hors ligne, à partir du cache Firebase.
+// ============================================================
+// Diffuser la liste des utilisateurs en ligne/hors ligne
+// ============================================================
 function broadcastUserLists() {
   const now = Date.now();
-
-  // "En ligne" = socket connecté ET activité réelle (souris/clavier/message) il y a moins
-  // de 5 minutes. Un socket connecté mais inactif depuis plus de 5 min bascule en "hors ligne"
-  // dans l'affichage, sans pour autant être déconnecté.
   const onlineList = Array.from(onlineSockets.keys()).filter((pseudo) => {
     const last = lastActivity.get(pseudo) || 0;
     return now - last < INACTIVITY_MS;
   });
-
-  // Hors ligne = tout compte Firebase connu qui n'est pas actuellement dans la liste "en ligne"
   const offlineList = firebaseUsersCache.filter(pseudo => !onlineList.includes(pseudo));
 
-  console.log(`[update_users] ${onlineList.length} en ligne, ${offlineList.length} hors ligne (cache Firebase: ${firebaseUsersCache.length} comptes)`);
+  console.log(`[update_users] ${onlineList.length} en ligne, ${offlineList.length} hors ligne`);
 
   io.emit("update_users", {
     onlineCount: onlineList.length,
@@ -132,9 +210,6 @@ function broadcastUserLists() {
     offlineUsers: offlineList
   });
 
-  // Info de debug envoyée à tout le monde ; seul le client admin l'affiche (voir index.html).
-  // Permet de voir la vraie cause d'un souci Firebase directement dans la console du
-  // navigateur, sans avoir besoin d'accéder aux logs du serveur (Render, etc.).
   io.emit("firebase_debug", {
     cacheSize: firebaseUsersCache.length,
     lastRefreshAt: firebaseCacheAt,
@@ -142,7 +217,6 @@ function broadcastUserLists() {
   });
 }
 
-// Rafraîchit le cache Firebase si besoin (TTL) puis diffuse les listes.
 async function sendUserLists() {
   if (Date.now() - firebaseCacheAt > FIREBASE_CACHE_TTL_MS) {
     await refreshFirebaseUsersCache();
@@ -162,67 +236,57 @@ io.on("connection", (socket) => {
   let myUid = null;
   let myIsAdmin = false;
 
-  // Le client envoie maintenant { pseudo, token } au lieu de { pseudo, mdp }
   socket.on("login_register", async ({ pseudo, token }) => {
-  let decoded;
-  try {
-    decoded = await admin.auth().verifyIdToken(token);
-  } catch (err) {
-    return socket.emit("auth_response", { success: false, message: "Session invalide, reconnecte-toi." });
-  }
-
-  const uid = decoded.uid;
-
-  // On récupère le pseudo : soit celui envoyé, soit celui déjà stocké en mémoire, soit le nom Firebase
-  const knownPseudo = users.get(uid);
-  const finalPseudo = String(pseudo || knownPseudo || decoded.name || "Utilisateur_" + uid.substring(0, 5)).trim();
-
-  // Si ce pseudo est déjà marqué "en ligne" sur un AUTRE socket, on prend le relais au lieu
-  // de bloquer la nouvelle connexion : ça évite de rester bloqué "connecté ailleurs" après
-  // une coupure réseau, une mise en veille du téléphone, un onglet qui a planté, etc.
-  const existingSocketId = onlineSockets.get(finalPseudo);
-  if (existingSocketId && existingSocketId !== socket.id) {
-    const existingSocket = io.sockets.sockets.get(existingSocketId);
-    if (existingSocket) {
-      existingSocket.emit("session_replaced", "Vous vous êtes connecté depuis un autre appareil/onglet.");
-      existingSocket.disconnect(true);
+    let decoded;
+    try {
+      decoded = await admin.auth().verifyIdToken(token);
+    } catch (err) {
+      return socket.emit("auth_response", { success: false, message: "Session invalide, reconnecte-toi." });
     }
-    onlineSockets.delete(finalPseudo);
-  }
 
-  const isAdmin = ADMIN_UIDS.includes(uid);
+    const uid = decoded.uid;
+    const knownPseudo = users.get(uid);
+    const finalPseudo = String(pseudo || knownPseudo || decoded.name || "Utilisateur_" + uid.substring(0, 5)).trim();
 
-  users.set(uid, finalPseudo);
-  myPseudo = finalPseudo;
-  myUid = uid;
-  myIsAdmin = isAdmin;
+    const existingSocketId = onlineSockets.get(finalPseudo);
+    if (existingSocketId && existingSocketId !== socket.id) {
+      const existingSocket = io.sockets.sockets.get(existingSocketId);
+      if (existingSocket) {
+        existingSocket.emit("session_replaced", "Vous vous êtes connecté depuis un autre appareil/onglet.");
+        existingSocket.disconnect(true);
+      }
+      onlineSockets.delete(finalPseudo);
+    }
 
-  onlineSockets.set(finalPseudo, socket.id);
-  lastActivity.set(finalPseudo, Date.now());
+    const isAdmin = ADMIN_UIDS.includes(uid);
 
-  socket.emit("auth_response", { success: true, pseudo: finalPseudo, is_admin: isAdmin });
-  socket.emit("load_history", generalHistory);
-  sendUserLists();
-});
+    users.set(uid, finalPseudo);
+    myPseudo = finalPseudo;
+    myUid = uid;
+    myIsAdmin = isAdmin;
+
+    onlineSockets.set(finalPseudo, socket.id);
+    lastActivity.set(finalPseudo, Date.now());
+
+    socket.emit("auth_response", { success: true, pseudo: finalPseudo, is_admin: isAdmin });
+    socket.emit("load_history", generalHistory);
+    sendUserLists();
+  });
 
   socket.on("heartbeat", (pseudo) => {
-    // Le heartbeat garde juste le socket "connu" ; il ne compte PAS comme
-    // activité réelle (sinon le statut "inactif depuis 5 min" ne marcherait jamais).
     if (pseudo) onlineSockets.set(pseudo, socket.id);
   });
 
-  // Émis par le client sur une vraie interaction (souris, clavier, clic...), throttlé côté client.
   socket.on("activity", () => {
     if (myPseudo) lastActivity.set(myPseudo, Date.now());
   });
 
-  // Message général OU privé (le client envoie toujours sur le même événement 'message')
   socket.on("message", (data) => {
     if (!myPseudo) return;
     lastActivity.set(myPseudo, Date.now());
     const msg = {
       id: nextMsgId++,
-      user: myPseudo, // toujours le pseudo authentifié côté serveur, jamais celui du client
+      user: myPseudo,
       text: data.text,
       type: data.type || "text",
       fileName: data.fileName || null,
@@ -243,6 +307,9 @@ io.on("connection", (socket) => {
         io.to(targetSocketId).emit("private_message", msg);
       }
     }
+
+    // Sauvegarder en arrière-plan
+    saveMessageToFirebase(msg);
   });
 
   socket.on("get_private_history", ({ target }) => {
@@ -252,17 +319,29 @@ io.on("connection", (socket) => {
     socket.emit("load_private_history", { target, history });
   });
 
-  // --- Mode espion admin : consulter la conversation privée de deux autres utilisateurs ---
   socket.on("admin_get_private_history", ({ user1, user2 }) => {
     if (!myIsAdmin) return;
     if (!user1 || !user2 || user1 === user2) return;
-    
-    // La fonction privateKey trie automatiquement les pseudos pour trouver la bonne clé
+
     const key = privateKey(user1, user2);
     const history = privateHistory.get(key) || [];
-    
-    // Renvoie l'historique au socket de l'admin
+
     socket.emit("load_admin_private_history", { user1, user2, history });
+  });
+
+  socket.on("admin_get_conversation_partners", ({ user1 }) => {
+    if (!myIsAdmin) return;
+    if (!user1) return;
+    const partners = new Set();
+    for (const [key, messages] of privateHistory.entries()) {
+      const [a, b] = key.split("|");
+      if (a === user1) partners.add(b);
+      else if (b === user1) partners.add(a);
+    }
+    socket.emit("admin_conversation_partners", {
+      user: user1,
+      partners: Array.from(partners).sort()
+    });
   });
 
   socket.on("delete_message", (id) => {
@@ -277,19 +356,31 @@ io.on("connection", (socket) => {
       if (idxP !== -1) { arr.splice(idxP, 1); removed = true; }
     }
 
-    if (removed) io.emit("message_deleted", id);
+    if (removed) {
+      io.emit("message_deleted", id);
+      // Supprimer aussi de Firebase
+      (async () => {
+        try {
+          await db.ref(`messages/general/msg_${id}`).remove();
+          for (const key of privateHistory.keys()) {
+            await db.ref(`messages/private/${key}/msg_${id}`).remove();
+          }
+        } catch (error) {
+          console.error("[Firebase] ❌ Erreur suppression message :", error.message || error);
+        }
+      })();
+    }
   });
 
- socket.on("ban_user", async ({ target }) => {
+  socket.on("ban_user", async ({ target }) => {
     if (!myIsAdmin) return;
 
     const targetEntry = [...users.entries()].find(([, p]) => p === target);
     if (!targetEntry) return;
     const [targetUid] = targetEntry;
 
-    if (ADMIN_UIDS.includes(targetUid)) return; // Protection admin
+    if (ADMIN_UIDS.includes(targetUid)) return;
 
-    // 1. Déconnexion immédiate du socket
     users.delete(targetUid);
     const targetSocketId = onlineSockets.get(target);
     if (targetSocketId) {
@@ -297,11 +388,9 @@ io.on("connection", (socket) => {
       onlineSockets.delete(target);
     }
 
-    // 2. SUPPRESSION DÉFINITIVE DANS FIREBASE
     try {
-      // Option radicale : supprime le compte de Firebase Authentication
       await admin.auth().deleteUser(targetUid);
-      console.log(`[BAN] Compte Firebase supprimé définitivement pour ${target} (${targetUid})`);
+      console.log(`[BAN] Compte Firebase supprimé pour ${target} (${targetUid})`);
     } catch (err) {
       console.error(`[BAN ERROR] Impossible de supprimer le compte Firebase :`, err.message);
     }
@@ -317,7 +406,10 @@ io.on("connection", (socket) => {
     if (!myPseudo) return;
     const score = data.score || 0;
     const current = leaderboard.get(myPseudo) || 0;
-    if (score > current) leaderboard.set(myPseudo, score);
+    if (score > current) {
+      leaderboard.set(myPseudo, score);
+      saveLeaderboardToFirebase();
+    }
     io.emit("update_leaderboard", getTopScores());
   });
 
@@ -329,15 +421,15 @@ io.on("connection", (socket) => {
   });
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   console.log(`Sem-chat démarré sur le port ${PORT}`);
 
-  // Charge immédiatement tous les pseudos Firebase au démarrage : ils apparaissent
-  // tous en "hors ligne" avant même qu'un seul utilisateur ne se connecte.
-  sendUserLists();
+  // Charger les messages depuis Firebase au démarrage
+  await loadMessagesFromFirebase();
 
-  // Rafraîchit périodiquement la liste : ça permet de basculer automatiquement en
-  // "hors ligne" quelqu'un d'inactif depuis 5 min, et de détecter les nouveaux
-  // comptes Firebase créés depuis le dernier appel, sans attendre un login/logout.
+  // Charger la liste des utilisateurs Firebase Auth
+  await sendUserLists();
+
+  // Rafraîchir périodiquement
   setInterval(sendUserLists, 30 * 1000);
 });
